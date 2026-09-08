@@ -5,6 +5,7 @@ import Modal from '../components/common/Modal';
 import { useAssets } from '../context/AssetContext';
 import { useAuth } from '../context/AuthContext';
 import { Save, Edit2 } from 'lucide-react';
+import { formatVND } from '../utils/formatters';
 
 const ASSET_TYPES = [
   'Thiết bị CNTT',
@@ -32,6 +33,8 @@ export default function AssetFormModal({ isOpen, onClose, asset, mode = 'edit' }
     brand: asset?.brand || '',
     model: asset?.model || '',
     serial: asset?.serial || '',
+    quantity: asset?.quantity !== undefined ? asset.quantity : 1,
+    unit: asset?.unit || 'Cái',
     purchaseDate: asset?.purchaseDate || '',
     supplier: asset?.supplier || '',
     invoiceNumber: asset?.invoiceNumber || '',
@@ -47,6 +50,35 @@ export default function AssetFormModal({ isOpen, onClose, asset, mode = 'edit' }
     notes: asset?.notes || '',
     fundingSource: asset?.fundingSource || ''
   });
+
+  React.useEffect(() => {
+    if (asset) {
+      setFormData({
+        name: asset.name || '',
+        type: asset.type || 'Thiết bị CNTT',
+        category: asset.category || '',
+        brand: asset.brand || '',
+        model: asset.model || '',
+        serial: asset.serial || '',
+        quantity: asset.quantity !== undefined ? asset.quantity : 1,
+        unit: asset.unit || 'Cái',
+        purchaseDate: asset.purchaseDate || '',
+        supplier: asset.supplier || '',
+        invoiceNumber: asset.invoiceNumber || '',
+        cost: asset.cost || '',
+        lifespanYears: asset.lifespanYears || 5,
+        departmentId: asset.departmentId || '',
+        departmentName: asset.departmentName || '',
+        locationPath: asset.locationPath || '',
+        responsiblePerson: asset.responsiblePerson || '',
+        currentUser: asset.currentUser || '',
+        condition: asset.condition || 'Tốt',
+        status: asset.status || 'Đang sử dụng',
+        notes: asset.notes || '',
+        fundingSource: asset.fundingSource || ''
+      });
+    }
+  }, [asset]);
 
   const [saved, setSaved] = useState(false);
 
@@ -66,6 +98,8 @@ export default function AssetFormModal({ isOpen, onClose, asset, mode = 'edit' }
 
     updateAsset(asset.id, {
       ...formData,
+      quantity: Math.max(1, Number(formData.quantity) || 1),
+      unit: formData.unit?.trim() || 'Cái',
       cost: Number(formData.cost) || 0,
       lifespanYears: Number(formData.lifespanYears) || 5
     });
@@ -138,10 +172,30 @@ export default function AssetFormModal({ isOpen, onClose, asset, mode = 'edit' }
           </div>
         </div>
 
-        {/* Row 3 */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, marginBottom: 14 }}>
+        {/* Row 3: Số lượng & Đơn vị & Giá trị */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr 1.4fr', gap: 14, marginBottom: 14 }}>
           <div>
-            <label className="form-label">Nguyên giá (VNĐ)</label>
+            <label className="form-label">Số lượng *</label>
+            <input
+              className="form-input"
+              type="number"
+              min={1}
+              value={formData.quantity}
+              onChange={e => setFormData(p => ({ ...p, quantity: e.target.value }))}
+              required
+            />
+          </div>
+          <div>
+            <label className="form-label">Đơn vị tính</label>
+            <input
+              className="form-input"
+              value={formData.unit}
+              placeholder="Cái, Chiếc, Bộ..."
+              onChange={e => setFormData(p => ({ ...p, unit: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className="form-label">Đơn giá (VNĐ)</label>
             <input
               className="form-input"
               type="number"
@@ -149,6 +203,26 @@ export default function AssetFormModal({ isOpen, onClose, asset, mode = 'edit' }
               onChange={e => setFormData(p => ({ ...p, cost: e.target.value }))}
             />
           </div>
+          <div>
+            <label className="form-label">Thành tiền (Tổng giá trị)</label>
+            <div style={{
+              height: 38,
+              padding: '8px 12px',
+              borderRadius: 6,
+              background: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              fontWeight: 700,
+              color: '#059669',
+              display: 'flex',
+              alignItems: 'center'
+            }}>
+              {formatVND((Number(formData.cost) || 0) * Math.max(1, Number(formData.quantity) || 1))}
+            </div>
+          </div>
+        </div>
+
+        {/* Row 3b: Ngày mua & Hạn sử dụng */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
           <div>
             <label className="form-label">Ngày mua</label>
             <input

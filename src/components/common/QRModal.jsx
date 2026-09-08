@@ -82,6 +82,7 @@ export default function QRModal({ isOpen, onClose, asset }) {
           </div>
 
           <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid #e2e8f0', fontSize: '12px', color: '#64748b', textAlign: 'left', lineHeight: 1.6 }}>
+            <div><strong>Số lượng:</strong> <span style={{ color: '#1e3a8a', fontWeight: 'bold' }}>{asset.quantity || 1} {asset.unit || 'Cái'}</span></div>
             <div><strong>Đơn vị:</strong> {asset.departmentName}</div>
             <div><strong>Vị trí:</strong> {asset.locationPath}</div>
             <div><strong>Phụ trách:</strong> {asset.responsiblePerson}</div>

@@ -145,9 +145,22 @@ export default function AssetDetailModal({ isOpen, onClose, asset, onOpenQR }) {
               <div style={{ fontWeight: 600, color: '#0f172a', fontFamily: 'monospace' }}>{asset.serial || '---'}</div>
             </div>
             <div>
-              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Nguyên giá (VNĐ)</div>
+              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Số lượng & Đơn vị</div>
+              <div style={{ fontWeight: 800, color: '#1e3a8a', fontSize: '1.05rem' }}>
+                {asset.quantity || 1} {asset.unit || 'Cái'}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                {(asset.quantity || 1) > 1 ? 'Tổng giá trị (Đơn giá)' : 'Nguyên giá (VNĐ)'}
+              </div>
               <div style={{ fontWeight: 800, color: '#059669', fontSize: '1.05rem' }}>
-                {formatVND(asset.cost)}
+                {formatVND((Number(asset.cost) || 0) * (Number(asset.quantity) || 1))}
+                {(asset.quantity || 1) > 1 && (
+                  <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 500, marginLeft: 6 }}>
+                    ({formatVND(asset.cost)} / {asset.unit || 'cái'})
+                  </span>
+                )}
               </div>
             </div>
             <div>

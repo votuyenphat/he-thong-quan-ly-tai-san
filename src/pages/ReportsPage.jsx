@@ -133,13 +133,13 @@ export default function ReportsPage() {
         return filteredAssets.map((a, i) => ({
           stt: i + 1,
           c1: a.code || '---',
-          c2: a.name || '---',
+          c2: a.quantity && a.quantity > 1 ? `${a.name} (SL: ${a.quantity} ${a.unit || 'Cái'})` : (a.name || '---'),
           c3: a.departmentName || '---',
           c4: a.locationPath || '---',
           c5: a.currentUser || 'Chưa bàn giao',
           c6: a.condition || 'Tốt',
           c7: a.status || 'Đang sử dụng',
-          num: Number(a.cost) || 0
+          num: (Number(a.cost) || 0) * (Number(a.quantity) || 1)
         }));
 
       case '2': { // Theo phòng
@@ -157,7 +157,8 @@ export default function ReportsPage() {
 
         return deptList.map((d, i) => {
           const dAssets = assets.filter(a => a.departmentId === d.id || a.departmentName === d.name);
-          const totalVal = dAssets.reduce((sum, a) => sum + (Number(a.cost) || 0), 0);
+          const totalQty = dAssets.reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
+          const totalVal = dAssets.reduce((sum, a) => sum + ((Number(a.cost) || 0) * (Number(a.quantity) || 1)), 0);
           return {
             stt: i + 1,
             c1: d.code || `PB-${i + 1}`,
@@ -165,7 +166,7 @@ export default function ReportsPage() {
             c3: d.manager || '---',
             c4: d.assetManager || '---',
             c5: d.location || '---',
-            c6: `${dAssets.length} thiết bị`,
+            c6: `${totalQty} món (${dAssets.length} mã)`,
             c7: 'Đang hoạt động',
             num: totalVal
           };

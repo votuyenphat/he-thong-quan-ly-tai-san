@@ -75,6 +75,10 @@ export default function AssetList({ setActiveTab }) {
     });
   }, [assets, currentUser, searchTerm, selectedDept, selectedCondition, selectedStatus, selectedType]);
 
+  const totalFilteredQuantity = useMemo(() => {
+    return filteredAssets.reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
+  }, [filteredAssets]);
+
   const handleExportExcel = () => {
     const exportData = filteredAssets.map((a, idx) => ({
       'STT': idx + 1,
@@ -84,11 +88,14 @@ export default function AssetList({ setActiveTab }) {
       'Nhóm': a.category,
       'Model': a.model,
       'Serial Number': a.serial,
+      'Số lượng': a.quantity || 1,
+      'Đơn vị tính': a.unit || 'Cái',
       'Đơn vị quản lý': a.departmentName,
       'Vị trí cụ thể': a.locationPath,
       'Người chịu trách nhiệm': a.responsiblePerson,
       'Người sử dụng': a.currentUser,
-      'Nguyên giá (VNĐ)': a.cost,
+      'Đơn giá (VNĐ)': a.cost,
+      'Tổng giá trị (VNĐ)': (Number(a.cost) || 0) * (Number(a.quantity) || 1),
       'Ngày mua': a.purchaseDate,
       'Hạn SD (Năm)': a.lifespanYears,
       'Tình trạng': a.condition,
@@ -148,7 +155,7 @@ export default function AssetList({ setActiveTab }) {
         <div style={{ display: 'flex', gap: 10 }}>
           <button className="btn btn-secondary" onClick={handleExportExcel}>
             <FileSpreadsheet size={16} />
-            Xuất Excel ({filteredAssets.length})
+            Xuất Excel ({filteredAssets.length} mã / {totalFilteredQuantity} món)
           </button>
           {permissions.canManageAssets && (
             <button className="btn btn-primary" onClick={() => setActiveTab('inbound')}>
@@ -254,9 +261,10 @@ export default function AssetList({ setActiveTab }) {
               <th style={{ width: '40px', textAlign: 'center' }}>STT</th>
               <th>Mã tài sản</th>
               <th>Tên tài sản & Nhãn hiệu</th>
+              <th style={{ textAlign: 'center', width: '95px' }}>Số lượng</th>
               <th>Phòng ban & Vị trí</th>
               <th>Người sử dụng</th>
-              <th style={{ textAlign: 'right' }}>Nguyên giá</th>
+              <th style={{ textAlign: 'right' }}>Tổng giá trị</th>
               <th style={{ textAlign: 'center' }}>Tình trạng</th>
               <th style={{ textAlign: 'center' }}>Trạng thái</th>
               <th style={{ textAlign: 'center', width: '180px' }}>Thao tác</th>
@@ -265,7 +273,7 @@ export default function AssetList({ setActiveTab }) {
           <tbody>
             {filteredAssets.length === 0 ? (
               <tr>
-                <td colSpan="9" style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
+                <td colSpan="10" style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
                   {assets.length === 0
                     ? 'Chưa có tài sản nào. Hãy nhập tài sản mới để bắt đầu.'
                     : 'Không tìm thấy tài sản nào phù hợp với điều kiện tìm kiếm.'}
@@ -305,6 +313,20 @@ export default function AssetList({ setActiveTab }) {
                       {asset.brand} • {asset.model} • {asset.type}
                     </div>
                   </td>
+                  <td style={{ textAlign: 'center' }}>
+                    <span style={{
+                      display: 'inline-block',
+                      padding: '3px 8px',
+                      borderRadius: '12px',
+                      fontWeight: 700,
+                      fontSize: '0.8rem',
+                      background: (asset.quantity || 1) > 1 ? '#dbeafe' : '#f1f5f9',
+                      color: (asset.quantity || 1) > 1 ? '#1d4ed8' : '#475569',
+                      border: (asset.quantity || 1) > 1 ? '1px solid #bfdbfe' : '1px solid #e2e8f0'
+                    }}>
+                      {asset.quantity || 1} {asset.unit || 'Cái'}
+                    </span>
+                  </td>
                   <td>
                     <div style={{ fontWeight: 500, color: '#1e3a8a', display: 'flex', alignItems: 'center', gap: 4 }}>
                       <Building size={13} />
@@ -321,8 +343,15 @@ export default function AssetList({ setActiveTab }) {
                       Chịu TN: {asset.responsiblePerson}
                     </div>
                   </td>
-                  <td style={{ textAlign: 'right', fontWeight: 700, color: '#0f172a' }}>
-                    {formatVND(asset.cost)}
+                  <td style={{ textAlign: 'right' }}>
+                    <div style={{ fontWeight: 700, color: '#0f172a' }}>
+                      {formatVND((Number(asset.cost) || 0) * (Number(asset.quantity) || 1))}
+                    </div>
+                    {(asset.quantity || 1) > 1 && (
+                      <div style={{ fontSize: '0.725rem', color: '#64748b' }}>
+                        {formatVND(asset.cost)} / {asset.unit || 'cái'}
+                      </div>
+                    )}
                   </td>
                   <td style={{ textAlign: 'center' }}>
                     <ConditionBadge condition={asset.condition} />

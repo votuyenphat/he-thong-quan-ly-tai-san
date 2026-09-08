@@ -48,20 +48,21 @@ export default function Dashboard({ setActiveTab }) {
   const { assets, departments, alerts } = useAssets();
 
   // 1. KPI Counts
-  const totalAssets = assets.length;
-  const inUseCount = assets.filter(a => a.status === 'Đang sử dụng').length;
-  const inStockCount = assets.filter(a => a.status === 'Trong kho').length;
-  const repairingCount = assets.filter(a => a.status === 'Đang sửa chữa' || a.condition === 'Hỏng nhẹ' || a.condition === 'Hỏng nặng').length;
-  const pendingLiquidationCount = assets.filter(a => a.status === 'Chờ thanh lý').length;
-  const liquidatedCount = assets.filter(a => a.status === 'Đã thanh lý').length;
+  const totalAssetCodes = assets.length;
+  const totalAssets = assets.reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
+  const inUseCount = assets.filter(a => a.status === 'Đang sử dụng').reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
+  const inStockCount = assets.filter(a => a.status === 'Trong kho').reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
+  const repairingCount = assets.filter(a => a.status === 'Đang sửa chữa' || a.condition === 'Hỏng nhẹ' || a.condition === 'Hỏng nặng').reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
+  const pendingLiquidationCount = assets.filter(a => a.status === 'Chờ thanh lý').reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
+  const liquidatedCount = assets.filter(a => a.status === 'Đã thanh lý').reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
 
-  const totalValue = assets.reduce((sum, a) => sum + (Number(a.cost) || 0), 0);
+  const totalValue = assets.reduce((sum, a) => sum + ((Number(a.cost) || 0) * (Number(a.quantity) || 1)), 0);
 
   // 2. Thống kê theo phòng
   const deptStats = departments.map(dept => {
     const deptAssets = assets.filter(a => a.departmentId === dept.id || a.departmentName === dept.name);
-    const count = deptAssets.length;
-    const value = deptAssets.reduce((sum, a) => sum + (Number(a.cost) || 0), 0);
+    const count = deptAssets.reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
+    const value = deptAssets.reduce((sum, a) => sum + ((Number(a.cost) || 0) * (Number(a.quantity) || 1)), 0);
     return {
       ...dept,
       count,
@@ -86,7 +87,7 @@ export default function Dashboard({ setActiveTab }) {
   const typeMap = {};
   assets.forEach(a => {
     const t = a.type || 'Khác';
-    typeMap[t] = (typeMap[t] || 0) + 1;
+    typeMap[t] = (typeMap[t] || 0) + (Number(a.quantity) || 1);
   });
   const chartTypeData = {
     labels: Object.keys(typeMap),
@@ -103,10 +104,11 @@ export default function Dashboard({ setActiveTab }) {
   // 5. Biểu đồ 3: Tài sản theo tình trạng (Polar Area)
   const conditionMap = { 'Tốt': 0, 'Khá': 0, 'Hỏng nhẹ': 0, 'Hỏng nặng': 0, 'Không sử dụng được': 0 };
   assets.forEach(a => {
+    const qty = Number(a.quantity) || 1;
     if (conditionMap[a.condition] !== undefined) {
-      conditionMap[a.condition]++;
+      conditionMap[a.condition] += qty;
     } else {
-      conditionMap['Khác'] = (conditionMap['Khác'] || 0) + 1;
+      conditionMap['Khác'] = (conditionMap['Khác'] || 0) + qty;
     }
   });
   const chartConditionData = {
@@ -214,14 +216,14 @@ export default function Dashboard({ setActiveTab }) {
         {/* Tổng số */}
         <div className="card" style={{ borderLeft: '4px solid #1e3a8a' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.825rem', color: '#64748b', fontWeight: 600 }}>Tổng số tài sản</span>
+            <span style={{ fontSize: '0.825rem', color: '#64748b', fontWeight: 600 }}>Tổng số thiết bị</span>
             <Boxes size={18} color="#1e3a8a" />
           </div>
           <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#0f172a', marginTop: 8 }}>
             {totalAssets}
           </div>
           <div style={{ fontSize: '0.75rem', color: '#10b981', marginTop: 4 }}>
-            ● Khai báo trên hệ thống
+            ● Gồm {totalAssetCodes} danh mục mã TS
           </div>
         </div>
 

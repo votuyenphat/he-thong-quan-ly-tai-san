@@ -28,6 +28,8 @@ export default function AssetInbound({ setActiveTab }) {
     brand: '',
     model: '',
     serial: '',
+    quantity: 1,
+    unit: 'Cái',
     purchaseDate: new Date().toISOString().slice(0, 10),
     importDate: new Date().toISOString().slice(0, 10),
     supplier: '',
@@ -70,6 +72,8 @@ export default function AssetInbound({ setActiveTab }) {
     const newAsset = {
       ...formData,
       code: newCode,
+      quantity: Math.max(1, Number(formData.quantity) || 1),
+      unit: formData.unit?.trim() || 'Cái',
       cost: Number(formData.cost) || 0,
       lifespanYears: Number(formData.lifespanYears) || 5,
       qrValue: newCode,
@@ -78,7 +82,7 @@ export default function AssetInbound({ setActiveTab }) {
     };
 
     addAsset(newAsset);
-    setNotification(`Đã nhập thành công tài sản mới: "${newAsset.name}" với mã: [${newCode}]`);
+    setNotification(`Đã nhập thành công tài sản mới: "${newAsset.name}" với mã: [${newCode}] (SL: ${newAsset.quantity} ${newAsset.unit})`);
 
     // Reset Form
     setFormData(prev => ({
@@ -87,6 +91,8 @@ export default function AssetInbound({ setActiveTab }) {
       brand: '',
       model: '',
       serial: '',
+      quantity: 1,
+      unit: 'Cái',
       cost: '',
       invoiceNumber: '',
       notes: ''
@@ -112,6 +118,8 @@ export default function AssetInbound({ setActiveTab }) {
         'Ngày nhập (YYYY-MM-DD)': '2026-03-05',
         'Nhà cung cấp': 'Công ty Phúc Anh',
         'Số chứng từ/HĐ': 'HD-PA-88192',
+        'Số lượng': 1,
+        'Đơn vị tính': 'Cái',
         'Nguyên giá': 8500000,
         'Thời gian SD (Năm)': 4,
         'Phòng ban': 'Phòng Hành chính - Quản trị',
@@ -151,6 +159,8 @@ export default function AssetInbound({ setActiveTab }) {
           brand: row['Nhãn hiệu'] || '',
           model: row['Model'] || '',
           serial: row['Serial Number'] || '',
+          quantity: Math.max(1, Number(row['Số lượng']) || 1),
+          unit: row['Đơn vị tính'] || 'Cái',
           purchaseDate: row['Ngày mua (YYYY-MM-DD)'] || new Date().toISOString().slice(0, 10),
           importDate: row['Ngày nhập (YYYY-MM-DD)'] || new Date().toISOString().slice(0, 10),
           supplier: row['Nhà cung cấp'] || '',
@@ -336,7 +346,30 @@ export default function AssetInbound({ setActiveTab }) {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
               <div className="form-group">
-                <label className="form-label">Nguyên giá mua vào (VNĐ) (*)</label>
+                <label className="form-label">Số lượng nhập (*)</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  min="1"
+                  value={formData.quantity}
+                  onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Đơn vị tính</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="VD: Cái, Chiếc, Bộ, Thiết bị..."
+                  value={formData.unit}
+                  onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Đơn giá mua vào (VNĐ) (*)</label>
                 <input
                   type="number"
                   className="form-input"
@@ -345,6 +378,23 @@ export default function AssetInbound({ setActiveTab }) {
                   onChange={(e) => setFormData({ ...formData, cost: e.target.value })}
                   required
                 />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Thành tiền (Tổng kinh phí)</label>
+                <div style={{
+                  height: 38,
+                  padding: '8px 12px',
+                  borderRadius: 6,
+                  background: '#f8fafc',
+                  border: '1px solid #cbd5e1',
+                  fontWeight: 700,
+                  color: '#059669',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}>
+                  {formatVND((Number(formData.cost) || 0) * Math.max(1, Number(formData.quantity) || 1))}
+                </div>
               </div>
 
               <div className="form-group">
