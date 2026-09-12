@@ -13,10 +13,11 @@ import {
   MapPin,
   FileSpreadsheet,
   History,
-  ShieldAlert
+  ShieldAlert,
+  X
 } from 'lucide-react';
 
-export default function Sidebar({ activeTab, setActiveTab }) {
+export default function Sidebar({ activeTab, setActiveTab, mobileOpen, onClose }) {
   const { permissions, currentUser } = useAuth();
   const { alerts } = useAssets();
 
@@ -67,72 +68,83 @@ export default function Sidebar({ activeTab, setActiveTab }) {
   ];
 
   return (
-    <aside className="sidebar no-print" style={{
-      width: '260px',
-      background: 'var(--bg-sidebar)',
-      color: 'var(--text-on-dark)',
-      display: 'flex',
-      flexDirection: 'column',
-      flexShrink: 0,
-      borderRight: '1px solid #1e293b'
-    }}>
-      {/* Brand area */}
-      <div style={{
-        padding: '20px 24px',
-        borderBottom: '1px solid #1e293b',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12
-      }}>
+    <>
+      {mobileOpen && (
+        <div className="sidebar-backdrop" onClick={onClose} />
+      )}
+      <aside className={`sidebar no-print ${mobileOpen ? 'mobile-open' : ''}`}>
+        {/* Brand area */}
         <div style={{
-          width: '32px',
-          height: '32px',
-          borderRadius: '8px',
-          background: 'linear-gradient(135deg, #2563eb, #3b82f6)',
+          padding: '18px 20px',
+          borderBottom: '1px solid #1e293b',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center',
-          fontWeight: 'bold',
-          fontSize: '15px'
+          justifyContent: 'space-between',
+          gap: 10
         }}>
-          TS
-        </div>
-        <div>
-          <div style={{ fontSize: '0.95rem', fontWeight: '800', letterSpacing: '0.02em', color: '#ffffff' }}>
-            QUẢN LÝ TÀI SẢN
-          </div>
-          <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
-            Phiên bản 2026 Pro
-          </div>
-        </div>
-      </div>
-
-      {/* Navigation List */}
-      <nav style={{ flex: 1, padding: '16px 12px', overflowY: 'auto' }}>
-        {menuSections.map((section, sIdx) => {
-          const visibleItems = section.items.filter(item => item.visible);
-          if (visibleItems.length === 0) return null;
-
-          return (
-            <div key={sIdx} style={{ marginBottom: '20px' }}>
-              <div style={{
-                fontSize: '0.68rem',
-                fontWeight: '700',
-                color: '#64748b',
-                padding: '0 12px 6px',
-                letterSpacing: '0.06em'
-              }}>
-                {section.title}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '8px',
+              background: 'linear-gradient(135deg, #2563eb, #3b82f6)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontWeight: 'bold',
+              fontSize: '15px'
+            }}>
+              TS
+            </div>
+            <div>
+              <div style={{ fontSize: '0.95rem', fontWeight: '800', letterSpacing: '0.02em', color: '#ffffff' }}>
+                QUẢN LÝ TÀI SẢN
               </div>
+              <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
+                Phiên bản 2026 Pro
+              </div>
+            </div>
+          </div>
 
-              {visibleItems.map(item => {
-                const Icon = item.icon;
-                const isActive = activeTab === item.id;
+          <button
+            type="button"
+            className="sidebar-close-btn"
+            onClick={onClose}
+            aria-label="Đóng menu"
+          >
+            <X size={20} />
+          </button>
+        </div>
 
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => setActiveTab(item.id)}
+        {/* Navigation List */}
+        <nav style={{ flex: 1, padding: '16px 12px', overflowY: 'auto' }}>
+          {menuSections.map((section, sIdx) => {
+            const visibleItems = section.items.filter(item => item.visible);
+            if (visibleItems.length === 0) return null;
+
+            return (
+              <div key={sIdx} style={{ marginBottom: '20px' }}>
+                <div style={{
+                  fontSize: '0.68rem',
+                  fontWeight: '700',
+                  color: '#64748b',
+                  padding: '0 12px 6px',
+                  letterSpacing: '0.06em'
+                }}>
+                  {section.title}
+                </div>
+
+                {visibleItems.map(item => {
+                  const Icon = item.icon;
+                  const isActive = activeTab === item.id;
+
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        setActiveTab(item.id);
+                        if (onClose) onClose();
+                      }}
                     style={{
                       width: '100%',
                       display: 'flex',
@@ -198,5 +210,6 @@ export default function Sidebar({ activeTab, setActiveTab }) {
         </div>
       </div>
     </aside>
+    </>
   );
 }

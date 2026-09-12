@@ -528,7 +528,7 @@ export default function LocationTree() {
       )}
 
       {/* Main Grid: Tree Left | Details Right */}
-      <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: 24 }}>
+      <div className="location-layout-grid">
         {/* Left: Tree */}
         <div className="card" style={{ padding: '16px', maxHeight: '82vh', overflowY: 'auto' }}>
           {/* Header of Tree */}

@@ -101,7 +101,7 @@ export default function DepartmentTree() {
         )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 24 }}>
+      <div className="tree-layout-grid">
         {/* Left: List of departments */}
         <div className="card" style={{ padding: '16px' }}>
           <div style={{

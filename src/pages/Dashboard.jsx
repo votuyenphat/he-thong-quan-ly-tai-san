@@ -215,12 +215,7 @@ export default function Dashboard({ setActiveTab }) {
       </div>
 
       {/* 1. TỔNG QUAN TÀI SẢN (6 Chỉ số KPI) */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-        gap: 16,
-        marginBottom: 24
-      }}>
+      <div className="dashboard-grid-kpi">
         {/* Tổng số */}
         <div className="card" style={{ borderLeft: '4px solid #1e3a8a' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -340,12 +335,7 @@ export default function Dashboard({ setActiveTab }) {
       </div>
 
       {/* 3. BIỂU ĐỒ 1 & 2 */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))',
-        gap: 20,
-        marginBottom: 24
-      }}>
+      <div className="dashboard-grid-2">
         {/* Biểu đồ theo phòng */}
         <div className="card">
           <h3 className="card-title">
@@ -446,12 +436,7 @@ export default function Dashboard({ setActiveTab }) {
       </div>
 
       {/* 4. BIỂU ĐỒ 3, 4 & 5 */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
-        gap: 20,
-        marginBottom: 24
-      }}>
+      <div className="dashboard-grid-3">
         {/* Biểu đồ theo tình trạng */}
         <div className="card">
           <h3 className="card-title">Tình trạng Thiết bị</h3>

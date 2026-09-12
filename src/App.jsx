@@ -1,7 +1,8 @@
 // src/App.jsx
 import React, { useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { AssetProvider } from './context/AssetContext';
+import { AssetProvider, useAssets } from './context/AssetContext';
+import { LayoutDashboard, Boxes, PlusCircle, ShieldAlert, Menu } from 'lucide-react';
 
 // Layout
 import Navbar from './components/layout/Navbar';
@@ -24,7 +25,15 @@ import CategoryConfig from './pages/CategoryConfig';
 
 function MainApplication() {
   const { isLoggedIn } = useAuth();
+  const { alerts } = useAssets();
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  const totalAlerts = 
+    (alerts?.wrongLocation?.length || 0) + 
+    (alerts?.missing?.length || 0) + 
+    (alerts?.pendingLiquidation?.length || 0) + 
+    (alerts?.expiringSoon?.length || 0);
 
   if (!isLoggedIn) {
     return <LoginScreen />;
@@ -63,11 +72,83 @@ function MainApplication() {
 
   return (
     <div className="app-container">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+      <Sidebar 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab} 
+        mobileOpen={mobileOpen}
+        onClose={() => setMobileOpen(false)}
+      />
       <div className="main-content">
-        <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
+        <Navbar 
+          activeTab={activeTab} 
+          setActiveTab={setActiveTab}
+          onOpenMobileMenu={() => setMobileOpen(true)}
+        />
         {renderActivePage()}
       </div>
+
+      {/* Mobile Bottom Navigation Bar */}
+      <nav className="mobile-bottom-nav no-print">
+        <button
+          type="button"
+          className={`mobile-nav-item ${activeTab === 'dashboard' ? 'active' : ''}`}
+          onClick={() => {
+            setActiveTab('dashboard');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+        >
+          <LayoutDashboard size={20} />
+          <span>Tổng quan</span>
+        </button>
+
+        <button
+          type="button"
+          className={`mobile-nav-item ${activeTab === 'assets' ? 'active' : ''}`}
+          onClick={() => {
+            setActiveTab('assets');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+        >
+          <Boxes size={20} />
+          <span>Tài sản</span>
+        </button>
+
+        <button
+          type="button"
+          className={`mobile-nav-item ${activeTab === 'inbound' ? 'active' : ''}`}
+          onClick={() => {
+            setActiveTab('inbound');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+        >
+          <PlusCircle size={20} />
+          <span>Nhập mới</span>
+        </button>
+
+        <button
+          type="button"
+          className={`mobile-nav-item ${activeTab === 'alerts' ? 'active' : ''}`}
+          onClick={() => {
+            setActiveTab('alerts');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+        >
+          <ShieldAlert size={20} />
+          <span>Cảnh báo</span>
+          {totalAlerts > 0 && (
+            <span className="mobile-nav-badge">{totalAlerts}</span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          className="mobile-nav-item"
+          onClick={() => setMobileOpen(true)}
+        >
+          <Menu size={20} />
+          <span>Menu</span>
+        </button>
+      </nav>
     </div>
   );
 }

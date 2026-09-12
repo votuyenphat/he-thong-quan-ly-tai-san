@@ -10,10 +10,11 @@ import {
   Shield, 
   LogOut,
   Building2,
-  Clock
+  Clock,
+  Menu
 } from 'lucide-react';
 
-export default function Navbar({ setActiveTab }) {
+export default function Navbar({ setActiveTab, onOpenMobileMenu }) {
   const { currentUser, switchRole, logout } = useAuth();
   const { alerts } = useAssets();
   const [showRoleMenu, setShowRoleMenu] = useState(false);
@@ -29,8 +30,8 @@ export default function Navbar({ setActiveTab }) {
     <header className="navbar no-print" style={{
       background: '#ffffff',
       borderBottom: '1px solid #e2e8f0',
-      padding: '0 28px',
-      height: '68px',
+      padding: '0 24px',
+      height: '64px',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
@@ -40,25 +41,37 @@ export default function Navbar({ setActiveTab }) {
       boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
     }}>
       {/* Title & Department context */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+        {/* Mobile Hamburger Menu Button */}
+        <button
+          type="button"
+          className="mobile-menu-btn"
+          onClick={onOpenMobileMenu}
+          title="Mở danh mục chức năng"
+          aria-label="Mở menu điều hướng"
+        >
+          <Menu size={20} />
+        </button>
+
         <div style={{
           background: 'linear-gradient(135deg, #1e3a8a, #2563eb)',
           color: '#ffffff',
           borderRadius: '10px',
-          width: '40px',
-          height: '40px',
+          width: '36px',
+          height: '36px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          boxShadow: '0 3px 6px rgba(37,99,235,0.25)'
+          boxShadow: '0 3px 6px rgba(37,99,235,0.25)',
+          flexShrink: 0
         }}>
-          <Building2 size={22} />
+          <Building2 size={20} />
         </div>
-        <div>
-          <h1 style={{ fontSize: '1.05rem', fontWeight: '800', color: '#0f172a', letterSpacing: '-0.01em', margin: 0 }}>
+        <div style={{ minWidth: 0 }}>
+          <h1 className="navbar-title" style={{ fontSize: '1rem', fontWeight: '800', color: '#0f172a', letterSpacing: '-0.01em', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             HỆ THỐNG QUẢN LÝ TÀI SẢN
           </h1>
-          <div style={{ fontSize: '0.75rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+          <div className="navbar-subtitle" style={{ fontSize: '0.75rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
             <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }}></span>
             Cơ sở dữ liệu tập trung 2026 • {currentUser?.department || 'Trường Đại học'}
           </div>
@@ -66,7 +79,7 @@ export default function Navbar({ setActiveTab }) {
       </div>
 
       {/* Action Center: Role Switcher, Alerts, User Info */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
         {/* Quick Role Switcher (4 Roles) */}
         <div style={{ position: 'relative' }}>
           <button 
@@ -77,11 +90,12 @@ export default function Navbar({ setActiveTab }) {
               color: '#1e40af', 
               borderColor: '#bfdbfe',
               fontWeight: 600,
-              fontSize: '0.8rem'
+              fontSize: '0.8rem',
+              padding: '6px 10px'
             }}
           >
             <Shield size={14} />
-            <span>{currentUser?.role}</span>
+            <span className="navbar-role-text">{currentUser?.role}</span>
             <ChevronDown size={14} />
           </button>
 
@@ -178,7 +192,7 @@ export default function Navbar({ setActiveTab }) {
               alt={currentUser?.name}
               style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #e2e8f0' }} 
             />
-            <div style={{ textAlign: 'left', lineHeight: 1.2 }}>
+            <div className="navbar-user-text" style={{ textAlign: 'left', lineHeight: 1.2 }}>
               <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#0f172a' }}>
                 {currentUser?.name}
               </div>
