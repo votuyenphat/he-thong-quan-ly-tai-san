@@ -8,7 +8,6 @@ import AssetDetailModal from './AssetDetailModal';
 import QRModal from '../components/common/QRModal';
 import AssetFormModal from './AssetFormModal';
 import LiquidationQuickModal from './LiquidationQuickModal';
-import ManageOptionsModal from '../components/common/ManageOptionsModal';
 import { exportToExcel } from '../utils/exportExcel';
 import {
   Search,
@@ -23,7 +22,6 @@ import {
   Trash2,
   AlertTriangle,
   FileX,
-  Sliders,
   X,
   RotateCcw,
   Filter
@@ -61,9 +59,6 @@ export default function AssetList({ setActiveTab }) {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isQROpen, setIsQROpen] = useState(false);
   const [qrAsset, setQrAsset] = useState(null);
-
-  // Manage dynamic options modal
-  const [isOptionsModalOpen, setIsOptionsModalOpen] = useState(false);
 
   // Edit modal state
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -295,15 +290,6 @@ export default function AssetList({ setActiveTab }) {
         </div>
 
         <div style={{ display: 'flex', gap: 10 }}>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => setIsOptionsModalOpen(true)}
-            style={{ color: '#1e40af' }}
-          >
-            <Sliders size={16} />
-            Tùy chỉnh danh mục
-          </button>
           <button className="btn btn-secondary" onClick={handleExportExcel}>
             <FileSpreadsheet size={16} />
             Xuất Excel ({filteredAssets.length} mã)
@@ -703,11 +689,6 @@ export default function AssetList({ setActiveTab }) {
       </div>
 
       {/* Modals */}
-      <ManageOptionsModal
-        isOpen={isOptionsModalOpen}
-        onClose={() => setIsOptionsModalOpen(false)}
-      />
-
       {isDetailOpen && selectedAsset && (
         <AssetDetailModal
           isOpen={isDetailOpen}

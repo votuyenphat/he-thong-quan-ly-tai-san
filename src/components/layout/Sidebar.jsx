@@ -13,8 +13,7 @@ import {
   MapPin,
   FileSpreadsheet,
   History,
-  ShieldAlert,
-  Sliders
+  ShieldAlert
 } from 'lucide-react';
 
 export default function Sidebar({ activeTab, setActiveTab }) {
@@ -46,7 +45,6 @@ export default function Sidebar({ activeTab, setActiveTab }) {
       items: [
         { id: 'assets', label: 'Danh mục Tài sản', icon: Boxes, visible: true },
         { id: 'inbound', label: 'Nhập tài sản mới', icon: PlusCircle, visible: permissions.canManageAssets },
-        { id: 'categories', label: 'Tùy biến Danh mục', icon: Sliders, visible: true },
         { id: 'transfer', label: 'Điều chuyển tài sản', icon: ArrowLeftRight, visible: true },
         { id: 'recall', label: 'Thu hồi tài sản', icon: RotateCcw, visible: permissions.canManageAssets },
         { id: 'liquidation', label: 'Thanh lý tài sản', icon: Trash2, visible: true }

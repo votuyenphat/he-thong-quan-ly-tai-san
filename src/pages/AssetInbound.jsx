@@ -5,15 +5,12 @@ import { useAuth } from '../context/AuthContext';
 import { generateAssetCode, formatVND } from '../utils/formatters';
 import { exportMultiSheetExcel, parseExcelFile } from '../utils/exportExcel';
 import ManageOptionsModal from '../components/common/ManageOptionsModal';
-import Modal from '../components/common/Modal';
 import {
   PlusCircle,
   Upload,
   Download,
   CheckCircle,
-  Sliders,
-  HelpCircle,
-  FileSpreadsheet
+  Sliders
 } from 'lucide-react';
 import { cleanText, canonicalStatus, canonicalCondition } from '../utils/normalize';
 
@@ -49,7 +46,6 @@ export default function AssetInbound({ setActiveTab }) {
 
   const [isOptionsModalOpen, setIsOptionsModalOpen] = useState(false);
   const [optionsModalTab, setOptionsModalTab] = useState('types');
-  const [isTemplateGuideOpen, setIsTemplateGuideOpen] = useState(false);
 
   const openOptions = (tab) => {
     setOptionsModalTab(tab);
@@ -671,15 +667,6 @@ export default function AssetInbound({ setActiveTab }) {
           <button
             type="button"
             className="btn btn-secondary"
-            onClick={() => setIsTemplateGuideOpen(true)}
-            style={{ color: '#0369a1', borderColor: '#bae6fd' }}
-          >
-            <HelpCircle size={16} />
-            Hướng dẫn mẫu Excel (19 cột)
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary"
             onClick={() => setIsOptionsModalOpen(true)}
             style={{ color: '#1e40af' }}
           >
@@ -701,70 +688,6 @@ export default function AssetInbound({ setActiveTab }) {
               disabled={isImporting}
             />
           </label>
-        </div>
-      </div>
-
-      {/* Banner thông tin về mẫu Excel chuẩn 19 cột */}
-      <div style={{
-        background: '#f0fdf4',
-        border: '1px solid #bbf7d0',
-        borderRadius: '10px',
-        padding: '12px 18px',
-        marginBottom: '20px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 12,
-        flexWrap: 'wrap',
-        boxShadow: 'var(--shadow-sm)'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <FileSpreadsheet size={24} color="#16a34a" />
-          <div style={{ fontSize: '0.875rem', color: '#166534' }}>
-            <strong>Mẫu Excel đã được cập nhật chuẩn 19 trường dữ liệu:</strong> Bao gồm đầy đủ Mã TS, Tên, Loại, Nhãn hiệu, SL, ĐVT, Đơn giá, Thành tiền, Năm nhập/xuất, Hạn SD (để trống = vô hạn), Nguồn kinh phí, Phòng ban, Vị trí, Người quản lý, Tình trạng, Trạng thái và Ghi chú.
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            type="button"
-            onClick={() => setIsTemplateGuideOpen(true)}
-            style={{
-              background: '#ffffff',
-              border: '1px solid #86efac',
-              color: '#15803d',
-              padding: '6px 12px',
-              borderRadius: '6px',
-              fontSize: '0.8rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5
-            }}
-          >
-            <HelpCircle size={14} />
-            Xem cấu trúc 19 cột
-          </button>
-          <button
-            type="button"
-            onClick={handleDownloadSample}
-            style={{
-              background: '#16a34a',
-              border: 'none',
-              color: '#ffffff',
-              padding: '6px 14px',
-              borderRadius: '6px',
-              fontSize: '0.8rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5
-            }}
-          >
-            <Download size={14} />
-            Tải mẫu .XLSX
-          </button>
         </div>
       </div>
 
@@ -1133,213 +1056,6 @@ export default function AssetInbound({ setActiveTab }) {
         initialTab={optionsModalTab}
       />
 
-      {/* Modal Hướng dẫn chi tiết cấu trúc 19 cột mẫu Excel */}
-      <Modal
-        isOpen={isTemplateGuideOpen}
-        onClose={() => setIsTemplateGuideOpen(false)}
-        title="Cấu Trúc & Hướng Dẫn Mẫu Excel Nhập Tài Sản (19 Cột)"
-        size="lg"
-        footer={
-          <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.85rem', color: '#64748b' }}>
-              File tải về gồm 3 trang tính (Sheets): <strong>Dữ liệu mẫu</strong>, <strong>Hướng dẫn</strong> và <strong>Danh mục tham chiếu</strong>
-            </span>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => setIsTemplateGuideOpen(false)}
-              >
-                Đóng
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => {
-                  handleDownloadSample();
-                  setIsTemplateGuideOpen(false);
-                }}
-                style={{ background: '#16a34a' }}
-              >
-                <Download size={16} />
-                Tải mẫu Excel (.XLSX)
-              </button>
-            </div>
-          </div>
-        }
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* Thông tin 3 sheet */}
-          <div style={{
-            background: '#f8fafc',
-            border: '1px solid #e2e8f0',
-            borderRadius: '10px',
-            padding: '14px 18px',
-            fontSize: '0.85rem',
-            lineHeight: 1.6
-          }}>
-            <div style={{ fontWeight: 700, color: '#1e3a8a', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <FileSpreadsheet size={18} color="#2563eb" />
-              Tập tin Excel mẫu tải về bao gồm 3 Sheet chuyên nghiệp:
-            </div>
-            <ul style={{ margin: 0, paddingLeft: 20, color: '#334155' }}>
-              <li><strong>Sheet 1 (DanhSach_NhapTaiSan):</strong> Bảng dữ liệu chính với đầy đủ 19 cột chuẩn hóa kèm 5 dòng ví dụ thực tế (PC, Máy in, Máy chiếu, Bàn ghế, Thiết bị đo).</li>
-              <li><strong>Sheet 2 (HuongDan_NhapLieu):</strong> Bảng giải thích chi tiết ý nghĩa, kiểu dữ liệu, các trường bắt buộc (*) và tùy chọn.</li>
-              <li><strong>Sheet 3 (DanhMuc_ThamChieu):</strong> Danh sách các giá trị chuẩn trong hệ thống (Loại tài sản, Tình trạng, Trạng thái, Nguồn kinh phí, Phòng ban) giúp đối soát copy/paste tiện lợi.</li>
-            </ul>
-          </div>
-
-          {/* Bảng tóm tắt 19 cột */}
-          <div style={{ maxHeight: '420px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
-            <table className="table" style={{ margin: 0, fontSize: '0.825rem' }}>
-              <thead>
-                <tr style={{ background: '#f1f5f9', position: 'sticky', top: 0, zIndex: 1 }}>
-                  <th style={{ width: '40px', textAlign: 'center' }}>STT</th>
-                  <th style={{ width: '180px' }}>Tên cột trong Excel</th>
-                  <th style={{ width: '100px', textAlign: 'center' }}>Bắt buộc</th>
-                  <th style={{ width: '120px' }}>Kiểu dữ liệu</th>
-                  <th>Quy tắc & Gợi ý nghiệp vụ</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td style={{ textAlign: 'center', fontWeight: 600 }}>1</td>
-                  <td style={{ fontWeight: 700, color: '#0f172a' }}>Mã tài sản</td>
-                  <td style={{ textAlign: 'center' }}><span style={{ color: '#64748b', fontSize: '0.75rem' }}>Tùy chọn</span></td>
-                  <td>Văn bản</td>
-                  <td>Để trống để hệ thống <strong>TỰ SINH MÃ</strong> tự động (TS-YYYY-XXXX). Nhập nếu đơn vị có mã quản lý riêng.</td>
-                </tr>
-                <tr>
-                  <td style={{ textAlign: 'center', fontWeight: 600 }}>2</td>
-                  <td style={{ fontWeight: 700, color: '#dc2626' }}>Tên tài sản (*)</td>
-                  <td style={{ textAlign: 'center' }}><span style={{ color: '#dc2626', fontWeight: 700, fontSize: '0.75rem' }}>BẮT BUỘC</span></td>
-                  <td>Văn bản</td>
-                  <td>Tên đầy đủ của tài sản, trang thiết bị, máy móc cần quản lý.</td>
-                </tr>
-                <tr>
-                  <td style={{ textAlign: 'center', fontWeight: 600 }}>3</td>
-                  <td style={{ fontWeight: 700, color: '#dc2626' }}>Loại tài sản (*)</td>
-                  <td style={{ textAlign: 'center' }}><span style={{ color: '#dc2626', fontWeight: 700, fontSize: '0.75rem' }}>BẮT BUỘC</span></td>
-                  <td>Danh mục</td>
-                  <td>Chọn theo danh mục: Thiết bị CNTT, Thiết bị Văn phòng, Thiết bị Giảng dạy, Thiết bị Thí nghiệm, Bàn ghế & Nội thất, Khác...</td>
-                </tr>
-                <tr>
-                  <td style={{ textAlign: 'center', fontWeight: 600 }}>4</td>
-                  <td style={{ fontWeight: 700, color: '#0f172a' }}>Nhãn hiệu / Hãng SX</td>
-                  <td style={{ textAlign: 'center' }}><span style={{ color: '#64748b', fontSize: '0.75rem' }}>Tùy chọn</span></td>
-                  <td>Văn bản</td>
-                  <td>Hãng sản xuất, xuất xứ (VD: Dell, HP, Panasonic, Hòa Phát...).</td>
-                </tr>
-                <tr>
-                  <td style={{ textAlign: 'center', fontWeight: 600 }}>5</td>
-                  <td style={{ fontWeight: 700, color: '#dc2626' }}>Số lượng (*)</td>
-                  <td style={{ textAlign: 'center' }}><span style={{ color: '#dc2626', fontWeight: 700, fontSize: '0.75rem' }}>BẮT BUỘC</span></td>
-                  <td>Số nguyên</td>
-                  <td>Số lượng bàn giao (VD: 1, 5, 10). Mặc định là 1 nếu để trống.</td>
-                </tr>
-                <tr>
-                  <td style={{ textAlign: 'center', fontWeight: 600 }}>6</td>
-                  <td style={{ fontWeight: 700, color: '#dc2626' }}>Đơn vị tính (*)</td>
-                  <td style={{ textAlign: 'center' }}><span style={{ color: '#dc2626', fontWeight: 700, fontSize: '0.75rem' }}>BẮT BUỘC</span></td>
-                  <td>Văn bản</td>
-                  <td>Đơn vị đo lường (VD: Cái, Bộ, Chiếc, Thiết bị, Hệ thống...).</td>
-                </tr>
-                <tr>
-                  <td style={{ textAlign: 'center', fontWeight: 600 }}>7</td>
-                  <td style={{ fontWeight: 700, color: '#dc2626' }}>Đơn giá (VNĐ) (*)</td>
-                  <td style={{ textAlign: 'center' }}><span style={{ color: '#dc2626', fontWeight: 700, fontSize: '0.75rem' }}>BẮT BUỘC</span></td>
-                  <td>Số tiền (VNĐ)</td>
-                  <td>Nguyên giá mua sắm của 1 đơn vị. Hỗ trợ cả số thông thường lẫn dấu chấm/phẩy (VD: 16,500,000).</td>
-                </tr>
-                <tr>
-                  <td style={{ textAlign: 'center', fontWeight: 600 }}>8</td>
-                  <td style={{ fontWeight: 700, color: '#0f172a' }}>Thành tiền (VNĐ)</td>
-                  <td style={{ textAlign: 'center' }}><span style={{ color: '#64748b', fontSize: '0.75rem' }}>Tự tính</span></td>
-                  <td>Số tiền (VNĐ)</td>
-                  <td>Tổng kinh phí = Số lượng x Đơn giá. Có thể để trống để hệ thống tự động tính.</td>
-                </tr>
-                <tr>
-                  <td style={{ textAlign: 'center', fontWeight: 600 }}>9</td>
-                  <td style={{ fontWeight: 700, color: '#dc2626' }}>Năm nhập kho (*)</td>
-                  <td style={{ textAlign: 'center' }}><span style={{ color: '#dc2626', fontWeight: 700, fontSize: '0.75rem' }}>BẮT BUỘC</span></td>
-                  <td>Năm 4 số</td>
-                  <td>Năm đưa vào quản lý (VD: 2026, 2025). Mặc định là năm hiện tại nếu trống.</td>
-                </tr>
-                <tr>
-                  <td style={{ textAlign: 'center', fontWeight: 600 }}>10</td>
-                  <td style={{ fontWeight: 700, color: '#0f172a' }}>Năm xuất kho</td>
-                  <td style={{ textAlign: 'center' }}><span style={{ color: '#64748b', fontSize: '0.75rem' }}>Tùy chọn</span></td>
-                  <td>Năm 4 số</td>
-                  <td>Để trống nếu tài sản đang sử dụng bình thường tại đơn vị.</td>
-                </tr>
-                <tr>
-                  <td style={{ textAlign: 'center', fontWeight: 600 }}>11</td>
-                  <td style={{ fontWeight: 700, color: '#0f172a' }}>Thời gian SD (Năm)</td>
-                  <td style={{ textAlign: 'center' }}><span style={{ color: '#64748b', fontSize: '0.75rem' }}>Tùy chọn</span></td>
-                  <td>Số năm</td>
-                  <td>Tuổi thọ sử dụng dự kiến (VD: 5, 8). <strong>ĐỂ TRỐNG = SỬ DỤNG VÔ HẠN</strong> (không cảnh báo hết hạn).</td>
-                </tr>
-                <tr>
-                  <td style={{ textAlign: 'center', fontWeight: 600 }}>12</td>
-                  <td style={{ fontWeight: 700, color: '#dc2626' }}>Nguồn kinh phí (*)</td>
-                  <td style={{ textAlign: 'center' }}><span style={{ color: '#dc2626', fontWeight: 700, fontSize: '0.75rem' }}>BẮT BUỘC</span></td>
-                  <td>Danh mục</td>
-                  <td>Ngân sách Nhà nước cấp, Nguồn thu sự nghiệp, Tài trợ / Viện trợ dự án, Khác.</td>
-                </tr>
-                <tr>
-                  <td style={{ textAlign: 'center', fontWeight: 600 }}>13</td>
-                  <td style={{ fontWeight: 700, color: '#dc2626' }}>Phòng ban tiếp nhận (*)</td>
-                  <td style={{ textAlign: 'center' }}><span style={{ color: '#dc2626', fontWeight: 700, fontSize: '0.75rem' }}>BẮT BUỘC</span></td>
-                  <td>Tên phòng ban</td>
-                  <td>Đơn vị tiếp nhận và quản lý (khớp theo danh mục Phòng ban của đơn vị).</td>
-                </tr>
-                <tr>
-                  <td style={{ textAlign: 'center', fontWeight: 600 }}>14</td>
-                  <td style={{ fontWeight: 700, color: '#0f172a' }}>Vị trí cụ thể</td>
-                  <td style={{ textAlign: 'center' }}><span style={{ color: '#64748b', fontSize: '0.75rem' }}>Tùy chọn</span></td>
-                  <td>Văn bản</td>
-                  <td>Đường dẫn vị trí (VD: Cơ sở 1 &gt; Khu A &gt; Tầng 2 &gt; Phòng A2.01).</td>
-                </tr>
-                <tr>
-                  <td style={{ textAlign: 'center', fontWeight: 600 }}>15</td>
-                  <td style={{ fontWeight: 700, color: '#0f172a' }}>Người chịu trách nhiệm</td>
-                  <td style={{ textAlign: 'center' }}><span style={{ color: '#64748b', fontSize: '0.75rem' }}>Tùy chọn</span></td>
-                  <td>Họ tên</td>
-                  <td>Cán bộ quản lý / Trưởng phòng phụ trách tài sản.</td>
-                </tr>
-                <tr>
-                  <td style={{ textAlign: 'center', fontWeight: 600 }}>16</td>
-                  <td style={{ fontWeight: 700, color: '#0f172a' }}>Người sử dụng trực tiếp</td>
-                  <td style={{ textAlign: 'center' }}><span style={{ color: '#64748b', fontSize: '0.75rem' }}>Tùy chọn</span></td>
-                  <td>Họ tên</td>
-                  <td>Cán bộ, giảng viên, nhân viên trực tiếp quản lý vận hành hàng ngày.</td>
-                </tr>
-                <tr>
-                  <td style={{ textAlign: 'center', fontWeight: 600 }}>17</td>
-                  <td style={{ fontWeight: 700, color: '#dc2626' }}>Tình trạng ban đầu (*)</td>
-                  <td style={{ textAlign: 'center' }}><span style={{ color: '#dc2626', fontWeight: 700, fontSize: '0.75rem' }}>BẮT BUỘC</span></td>
-                  <td>Danh mục</td>
-                  <td>Tốt, Khá, Hỏng nhẹ, Hỏng nặng, Không sử dụng được.</td>
-                </tr>
-                <tr>
-                  <td style={{ textAlign: 'center', fontWeight: 600 }}>18</td>
-                  <td style={{ fontWeight: 700, color: '#dc2626' }}>Trạng thái ban đầu (*)</td>
-                  <td style={{ textAlign: 'center' }}><span style={{ color: '#dc2626', fontWeight: 700, fontSize: '0.75rem' }}>BẮT BUỘC</span></td>
-                  <td>Danh mục</td>
-                  <td>Đang sử dụng, Trong kho, Điều chuyển, Chờ thanh lý...</td>
-                </tr>
-                <tr>
-                  <td style={{ textAlign: 'center', fontWeight: 600 }}>19</td>
-                  <td style={{ fontWeight: 700, color: '#0f172a' }}>Ghi chú thêm</td>
-                  <td style={{ textAlign: 'center' }}><span style={{ color: '#64748b', fontSize: '0.75rem' }}>Tùy chọn</span></td>
-                  <td>Văn bản</td>
-                  <td>Ghi chú phụ kiện đi kèm, số hóa đơn, thông số kỹ thuật, ghi chú bảo hành...</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </Modal>
     </div>
   );
 }
