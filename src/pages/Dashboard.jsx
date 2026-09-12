@@ -21,7 +21,6 @@ import {
   Boxes,
   CheckCircle2,
   Package,
-  Wrench,
   Clock,
   Archive,
   AlertTriangle,
@@ -58,7 +57,6 @@ export default function Dashboard({ setActiveTab }) {
   const totalAssets = assets.reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
   const inUseCount = assets.filter(a => canonicalStatus(a.status) === 'Đang sử dụng').reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
   const inStockCount = assets.filter(a => canonicalStatus(a.status) === 'Trong kho').reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
-  const repairingCount = assets.filter(a => ['Hỏng nhẹ', 'Hỏng nặng'].includes(canonicalCondition(a.condition))).reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
   const pendingLiquidationCount = assets.filter(a => canonicalStatus(a.status) === 'Chờ thanh lý').reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
   const liquidatedCount = assets.filter(a => canonicalStatus(a.status) === 'Đã thanh lý').reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
 
@@ -262,20 +260,6 @@ export default function Dashboard({ setActiveTab }) {
           </div>
           <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 4 }}>
             Sẵn sàng cấp phát
-          </div>
-        </div>
-
-        {/* Hỏng / chờ sửa */}
-        <div className="card" style={{ borderLeft: '4px solid #f59e0b' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.825rem', color: '#64748b', fontWeight: 600 }}>Hỏng / chờ sửa</span>
-            <Wrench size={18} color="#f59e0b" />
-          </div>
-          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#f59e0b', marginTop: 8 }}>
-            {repairingCount}
-          </div>
-          <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 4 }}>
-            Cần bảo dưỡng kỹ thuật
           </div>
         </div>
 
