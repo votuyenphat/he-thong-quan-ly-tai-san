@@ -16,7 +16,10 @@ import {
   Inbox,
   DollarSign,
   TrendingUp,
-  AlertCircle
+  AlertCircle,
+  RotateCcw,
+  Eye,
+  Search
 } from 'lucide-react';
 
 export default function ReportsPage() {
@@ -31,6 +34,21 @@ export default function ReportsPage() {
 
   const [selectedReportType, setSelectedReportType] = useState('1'); // 1 to 12
   const [selectedDept, setSelectedDept] = useState('ALL');
+  // Trạng thái đã lọc yêu cầu hay chưa (khi chưa lọc -> không hiện bảng xem trước)
+  const [appliedCriteria, setAppliedCriteria] = useState(null);
+
+  const handleViewReport = () => {
+    setAppliedCriteria({
+      reportType: selectedReportType,
+      dept: selectedDept
+    });
+  };
+
+  const handleResetFilter = () => {
+    setSelectedReportType('1');
+    setSelectedDept('ALL');
+    setAppliedCriteria(null);
+  };
 
   // Danh sách các phòng ban tự động tổng hợp từ danh mục phòng ban và từ danh sách tài sản
   const availableDepts = useMemo(() => {
@@ -119,16 +137,20 @@ export default function ReportsPage() {
     }
   ];
 
-  const currentDef = reportDefinitions.find(r => r.id === selectedReportType) || reportDefinitions[0];
+  const activeReportType = appliedCriteria ? appliedCriteria.reportType : selectedReportType;
+  const activeDept = appliedCriteria ? appliedCriteria.dept : selectedDept;
+  const currentDef = reportDefinitions.find(r => r.id === activeReportType) || reportDefinitions[0];
+  const isFilterChanged = appliedCriteria !== null && (appliedCriteria.reportType !== selectedReportType || appliedCriteria.dept !== selectedDept);
 
-  // Dynamic Data Generator based on Report Type
+  // Dynamic Data Generator based on Report Type (chỉ tính toán khi đã bấm Xem báo cáo)
   const reportData = useMemo(() => {
+    if (!appliedCriteria) return [];
     let filteredAssets = assets;
-    if (selectedDept !== 'ALL') {
-      filteredAssets = assets.filter(a => a.departmentName === selectedDept || a.departmentId === selectedDept);
+    if (activeDept !== 'ALL') {
+      filteredAssets = assets.filter(a => a.departmentName === activeDept || a.departmentId === activeDept);
     }
 
-    switch (selectedReportType) {
+    switch (activeReportType) {
       case '1': // Toàn trường
         return filteredAssets.map((a, i) => ({
           stt: i + 1,
@@ -334,7 +356,7 @@ export default function ReportsPage() {
       default:
         return [];
     }
-  }, [assets, departments, transfers, recalls, liquidations, inventorySessions, selectedReportType, selectedDept, availableDepts]);
+  }, [assets, departments, transfers, recalls, liquidations, inventorySessions, activeReportType, activeDept, availableDepts, appliedCriteria]);
 
   // Tổng giá trị tính toán
   const totalReportValue = useMemo(() => {
@@ -342,8 +364,8 @@ export default function ReportsPage() {
   }, [reportData]);
 
   const handleExportExcel = () => {
-    if (reportData.length === 0) {
-      alert('Chưa có dữ liệu để xuất Excel!');
+    if (!appliedCriteria || reportData.length === 0) {
+      alert('Vui lòng nhấn "Xem báo cáo" để tải dữ liệu trước khi xuất Excel!');
       return;
     }
 
@@ -360,12 +382,12 @@ export default function ReportsPage() {
       [headers[7]]: r.num > 0 ? r.num : 0
     }));
 
-    exportToExcel(exportedRows, `Bao_Cao_${selectedReportType}_${new Date().getFullYear()}.xlsx`);
+    exportToExcel(exportedRows, `Bao_Cao_${activeReportType}_${new Date().getFullYear()}.xlsx`);
   };
 
   const handlePrintReport = () => {
-    if (reportData.length === 0) {
-      alert('Chưa có dữ liệu để in báo cáo!');
+    if (!appliedCriteria || reportData.length === 0) {
+      alert('Vui lòng nhấn "Xem báo cáo" để tải dữ liệu trước khi in báo cáo!');
       return;
     }
     printElement('printable-full-report');
@@ -389,17 +411,19 @@ export default function ReportsPage() {
           <button 
             className="btn btn-secondary" 
             onClick={handleExportExcel}
-            disabled={reportData.length === 0}
-            style={{ opacity: reportData.length === 0 ? 0.6 : 1 }}
+            disabled={!appliedCriteria || reportData.length === 0}
+            style={{ opacity: !appliedCriteria || reportData.length === 0 ? 0.5 : 1 }}
+            title={!appliedCriteria ? 'Vui lòng xem báo cáo trước khi xuất' : 'Xuất danh sách ra Excel'}
           >
             <FileSpreadsheet size={16} />
-            Xuất Excel ({reportData.length})
+            Xuất Excel {appliedCriteria ? `(${reportData.length})` : ''}
           </button>
           <button 
             className="btn btn-primary" 
             onClick={handlePrintReport}
-            disabled={reportData.length === 0}
-            style={{ opacity: reportData.length === 0 ? 0.6 : 1 }}
+            disabled={!appliedCriteria || reportData.length === 0}
+            style={{ opacity: !appliedCriteria || reportData.length === 0 ? 0.5 : 1 }}
+            title={!appliedCriteria ? 'Vui lòng xem báo cáo trước khi in' : 'In báo cáo hoặc xuất PDF'}
           >
             <Printer size={16} />
             In Báo Cáo / Xuất PDF
@@ -407,46 +431,9 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* Quick Summary Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 20 }}>
-        <div className="card" style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{ width: 44, height: 44, borderRadius: 10, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563eb' }}>
-            <FileText size={22} />
-          </div>
-          <div>
-            <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>TỔNG SỐ BẢN GHI</div>
-            <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#1e293b' }}>{reportData.length}</div>
-          </div>
-        </div>
-
-        <div className="card" style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{ width: 44, height: 44, borderRadius: 10, background: '#ecfdf5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#059669' }}>
-            <DollarSign size={22} />
-          </div>
-          <div>
-            <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>TỔNG GIÁ TRỊ (VNĐ)</div>
-            <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#059669' }}>
-              {totalReportValue > 0 ? formatVND(totalReportValue) : '---'}
-            </div>
-          </div>
-        </div>
-
-        <div className="card" style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{ width: 44, height: 44, borderRadius: 10, background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569' }}>
-            <Building size={22} />
-          </div>
-          <div>
-            <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>PHẠM VI ĐANG XEM</div>
-            <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#334155' }}>
-              {selectedDept === 'ALL' ? 'Toàn trường (Tất cả)' : selectedDept}
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Selector & Filter Bar */}
       <div className="card" style={{ marginBottom: 20, padding: '18px 22px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, alignItems: 'flex-end' }}>
           <div>
             <label className="form-label">Chọn 1 trong 12 mẫu báo cáo nghiệp vụ (*):</label>
             <select
@@ -462,7 +449,7 @@ export default function ReportsPage() {
               ))}
             </select>
             <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 4 }}>
-              {currentDef.desc}
+              {reportDefinitions.find(r => r.id === selectedReportType)?.desc}
             </div>
           </div>
 
@@ -482,69 +469,172 @@ export default function ReportsPage() {
               Lọc danh sách theo từng đơn vị cụ thể hoặc xem toàn bộ
             </div>
           </div>
+
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              style={{ flex: 1, padding: '10px 18px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              onClick={handleViewReport}
+            >
+              <Eye size={16} />
+              Xem báo cáo
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 6 }}
+              onClick={handleResetFilter}
+              title="Đặt lại bộ lọc"
+            >
+              <RotateCcw size={16} />
+              Đặt lại
+            </button>
+          </div>
         </div>
+
+        {isFilterChanged && (
+          <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px dashed #e2e8f0', fontSize: '0.8rem', color: '#b45309', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <AlertCircle size={14} />
+            <span>Điều kiện lọc đã thay đổi. Vui lòng bấm <strong>"Xem báo cáo"</strong> để cập nhật lại dữ liệu hiển thị.</span>
+          </div>
+        )}
       </div>
 
-      {/* Preview Table */}
-      <div className="card">
-        <h3 className="card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>Xem Trước Báo Cáo: {currentDef.name}</span>
-          <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 500 }}>
-            Tổng cộng: <strong>{reportData.length}</strong> kết quả
-          </span>
-        </h3>
+      {!appliedCriteria ? (
+        /* Hộp thông báo chờ lọc - Không hiển thị bảng xem trước mặc định */
+        <div className="card" style={{ textAlign: 'center', padding: '56px 24px', color: '#64748b' }}>
+          <div style={{
+            width: 64,
+            height: 64,
+            borderRadius: '50%',
+            background: '#eff6ff',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 16px',
+            color: '#2563eb'
+          }}>
+            <FileSpreadsheet size={32} />
+          </div>
+          <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>
+            Chế độ xem trước báo cáo đang ở trạng thái chờ
+          </h3>
+          <p style={{ maxWidth: 520, margin: '0 auto 20px', fontSize: '0.875rem', lineHeight: 1.6, color: '#64748b' }}>
+            Để tối ưu tốc độ và không làm chậm trình duyệt, bảng xem trước không hiển thị tự động.
+            Vui lòng chọn mẫu báo cáo và phạm vi phòng/ban ở trên, sau đó nhấn nút <strong>"Xem báo cáo"</strong> để tải dữ liệu.
+          </p>
+          <button
+            type="button"
+            className="btn btn-primary"
+            style={{ padding: '10px 24px', fontSize: '0.9rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 8 }}
+            onClick={handleViewReport}
+          >
+            <Eye size={16} />
+            Xem báo cáo ngay
+          </button>
+        </div>
+      ) : (
+        <>
+          {/* Quick Summary Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 20 }}>
+            <div className="card" style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div style={{ width: 44, height: 44, borderRadius: 10, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563eb' }}>
+                <FileText size={22} />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>TỔNG SỐ BẢN GHI</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#1e293b' }}>{reportData.length}</div>
+              </div>
+            </div>
 
-        <div className="table-container">
-          <table className="table">
-            <thead>
-              <tr>
-                <th style={{ width: '40px', textAlign: 'center' }}>STT</th>
-                <th>{currentDef.headers[0]}</th>
-                <th>{currentDef.headers[1]}</th>
-                <th>{currentDef.headers[2]}</th>
-                <th>{currentDef.headers[3]}</th>
-                <th>{currentDef.headers[4]}</th>
-                <th style={{ textAlign: 'center' }}>{currentDef.headers[5]}</th>
-                <th style={{ textAlign: 'center' }}>{currentDef.headers[6]}</th>
-                <th style={{ textAlign: 'right' }}>{currentDef.headers[7]}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {reportData.length === 0 ? (
-                <tr>
-                  <td colSpan={9} style={{ textAlign: 'center', padding: '48px 24px', color: '#64748b' }}>
-                    <Inbox size={44} style={{ margin: '0 auto 12px', opacity: 0.35, display: 'block', color: '#3b82f6' }} />
-                    <div style={{ fontWeight: 700, fontSize: '1rem', color: '#334155', marginBottom: 6 }}>
-                      Chưa có dữ liệu cho mẫu báo cáo này
-                    </div>
-                    <div style={{ fontSize: '0.85rem', maxWidth: 500, margin: '0 auto', lineHeight: 1.5 }}>
-                      {selectedDept !== 'ALL'
-                        ? `Không tìm thấy bản ghi nào thuộc phòng/ban "${selectedDept}". Hãy chọn lại "-- Toàn trường --" để xem toàn bộ.`
-                        : 'Hệ thống chưa có bản ghi nào phù hợp. Bạn có thể thêm tài sản mới hoặc tạo các phiếu nghiệp vụ tương ứng.'}
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                reportData.map((row) => (
-                  <tr key={row.stt}>
-                    <td style={{ textAlign: 'center', color: '#64748b', fontSize: '0.8rem' }}>{row.stt}</td>
-                    <td><strong style={{ color: '#1e3a8a' }}>{row.c1}</strong></td>
-                    <td><div style={{ fontWeight: 600 }}>{row.c2}</div></td>
-                    <td style={{ fontSize: '0.825rem' }}>{row.c3}</td>
-                    <td style={{ fontSize: '0.8rem', color: '#64748b' }}>{row.c4}</td>
-                    <td style={{ fontSize: '0.825rem' }}>{row.c5}</td>
-                    <td style={{ textAlign: 'center', fontSize: '0.8rem' }}>{row.c6}</td>
-                    <td style={{ textAlign: 'center', fontSize: '0.8rem' }}>{row.c7}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 700 }}>
-                      {row.num > 0 ? formatVND(row.num) : '---'}
-                    </td>
+            <div className="card" style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div style={{ width: 44, height: 44, borderRadius: 10, background: '#ecfdf5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#059669' }}>
+                <DollarSign size={22} />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>TỔNG GIÁ TRỊ (VNĐ)</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#059669' }}>
+                  {totalReportValue > 0 ? formatVND(totalReportValue) : '---'}
+                </div>
+              </div>
+            </div>
+
+            <div className="card" style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div style={{ width: 44, height: 44, borderRadius: 10, background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569' }}>
+                <Building size={22} />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>PHẠM VI ĐANG XEM</div>
+                <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#334155' }}>
+                  {activeDept === 'ALL' ? 'Toàn trường (Tất cả)' : activeDept}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Preview Table */}
+          <div className="card">
+            <h3 className="card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>Xem Trước Báo Cáo: {currentDef.name}</span>
+              <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 500 }}>
+                Tổng cộng: <strong>{reportData.length}</strong> kết quả
+              </span>
+            </h3>
+
+            <div className="table-container">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '40px', textAlign: 'center' }}>STT</th>
+                    <th>{currentDef.headers[0]}</th>
+                    <th>{currentDef.headers[1]}</th>
+                    <th>{currentDef.headers[2]}</th>
+                    <th>{currentDef.headers[3]}</th>
+                    <th>{currentDef.headers[4]}</th>
+                    <th style={{ textAlign: 'center' }}>{currentDef.headers[5]}</th>
+                    <th style={{ textAlign: 'center' }}>{currentDef.headers[6]}</th>
+                    <th style={{ textAlign: 'right' }}>{currentDef.headers[7]}</th>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                </thead>
+                <tbody>
+                  {reportData.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} style={{ textAlign: 'center', padding: '48px 24px', color: '#64748b' }}>
+                        <Inbox size={44} style={{ margin: '0 auto 12px', opacity: 0.35, display: 'block', color: '#3b82f6' }} />
+                        <div style={{ fontWeight: 700, fontSize: '1rem', color: '#334155', marginBottom: 6 }}>
+                          Chưa có dữ liệu cho mẫu báo cáo này
+                        </div>
+                        <div style={{ fontSize: '0.85rem', maxWidth: 500, margin: '0 auto', lineHeight: 1.5 }}>
+                          {activeDept !== 'ALL'
+                            ? `Không tìm thấy bản ghi nào thuộc phòng/ban "${activeDept}". Hãy chọn lại "-- Toàn trường --" và nhấn Xem báo cáo.`
+                            : 'Hệ thống chưa có bản ghi nào phù hợp. Bạn có thể thêm tài sản mới hoặc tạo các phiếu nghiệp vụ tương ứng.'}
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    reportData.map((row) => (
+                      <tr key={row.stt}>
+                        <td style={{ textAlign: 'center', color: '#64748b', fontSize: '0.8rem' }}>{row.stt}</td>
+                        <td><strong style={{ color: '#1e3a8a' }}>{row.c1}</strong></td>
+                        <td><div style={{ fontWeight: 600 }}>{row.c2}</div></td>
+                        <td style={{ fontSize: '0.825rem' }}>{row.c3}</td>
+                        <td style={{ fontSize: '0.8rem', color: '#64748b' }}>{row.c4}</td>
+                        <td style={{ fontSize: '0.825rem' }}>{row.c5}</td>
+                        <td style={{ textAlign: 'center', fontSize: '0.8rem' }}>{row.c6}</td>
+                        <td style={{ textAlign: 'center', fontSize: '0.8rem' }}>{row.c7}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 700 }}>
+                          {row.num > 0 ? formatVND(row.num) : '---'}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Hidden Printable Full Report Template */}
       <div style={{ display: 'none' }}>

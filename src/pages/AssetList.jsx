@@ -24,8 +24,25 @@ import {
   FileX,
   X,
   RotateCcw,
-  Filter
+  Filter,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight
 } from 'lucide-react';
+
+function getPageNumbers(current, total) {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  if (current <= 4) {
+    return [1, 2, 3, 4, 5, '...', total];
+  }
+  if (current >= total - 3) {
+    return [1, '...', total - 4, total - 3, total - 2, total - 1, total];
+  }
+  return [1, '...', current - 1, current, current + 1, '...', total];
+}
 
 import {
   cleanText,
@@ -208,6 +225,34 @@ export default function AssetList({ setActiveTab }) {
   const totalFilteredValue = useMemo(() => {
     return filteredAssets.reduce((sum, a) => sum + ((Number(a.cost) || 0) * (Number(a.quantity) || 1)), 0);
   }, [filteredAssets]);
+
+  // Phân trang (mặc định 50, tối đa 50 tài sản/trang)
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+
+  // Tự động reset về trang 1 khi thay đổi bộ lọc hoặc kích thước trang
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    searchTerm,
+    selectedDept,
+    selectedCondition,
+    selectedStatus,
+    selectedType,
+    selectedYear,
+    selectedPriceRange,
+    quickFilter,
+    pageSize
+  ]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredAssets.length / pageSize));
+  const validCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const startIndex = (validCurrentPage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, filteredAssets.length);
+
+  const paginatedAssets = useMemo(() => {
+    return filteredAssets.slice(startIndex, endIndex);
+  }, [filteredAssets, startIndex, endIndex]);
 
   // Export to Excel (cleaned of model, serial, supplier, invoice, etc.)
   const handleExportExcel = () => {
@@ -504,6 +549,11 @@ export default function AssetList({ setActiveTab }) {
           <div>
             Tìm thấy: <strong style={{ color: '#1e40af' }}>{filteredAssets.length}</strong> / {assets.length} mã tài sản
             {' '}(<strong style={{ color: '#0f172a' }}>{totalFilteredQuantity}</strong> hiện vật)
+            {filteredAssets.length > 0 && (
+              <span style={{ marginLeft: 8, color: '#64748b' }}>
+                • Trang <strong style={{ color: '#1e3a8a' }}>{validCurrentPage}</strong> / {totalPages} (Tối đa {pageSize} tài sản/trang)
+              </span>
+            )}
           </div>
           <div>
             Tổng giá trị: <strong style={{ color: '#059669', fontSize: '0.9rem' }}>{formatVND(totalFilteredValue)}</strong>
@@ -539,13 +589,13 @@ export default function AssetList({ setActiveTab }) {
                 </td>
               </tr>
             ) : (
-              filteredAssets.map((asset, index) => {
+              paginatedAssets.map((asset, index) => {
                 const displayYear = asset.importYear || asset.purchaseYear || (asset.purchaseDate ? String(asset.purchaseDate).slice(0, 4) : '---');
 
                 return (
                   <tr key={asset.id}>
                     <td style={{ textAlign: 'center', color: '#64748b', fontSize: '0.8rem' }}>
-                      {index + 1}
+                      {startIndex + index + 1}
                     </td>
                     <td>
                       <span
@@ -687,6 +737,130 @@ export default function AssetList({ setActiveTab }) {
           </tbody>
         </table>
       </div>
+
+      {/* Pagination Bar */}
+      {filteredAssets.length > 0 && (
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 16,
+          marginTop: 16,
+          padding: '12px 18px',
+          background: '#ffffff',
+          borderRadius: 8,
+          border: '1px solid #e2e8f0',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+        }}>
+          {/* Left: Info & Page size selector */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontSize: '0.85rem', color: '#475569', flexWrap: 'wrap' }}>
+            <span>
+              Hiển thị <strong>{startIndex + 1}</strong> - <strong>{endIndex}</strong> trên <strong>{filteredAssets.length}</strong> tài sản
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ color: '#64748b' }}>Số lượng/trang:</span>
+              <select
+                className="form-select"
+                style={{ padding: '4px 8px', fontSize: '0.825rem', width: 'auto', height: 'auto' }}
+                value={pageSize}
+                onChange={(e) => setPageSize(Number(e.target.value))}
+              >
+                <option value={10}>10 / trang</option>
+                <option value={25}>25 / trang</option>
+                <option value={50}>50 / trang (Tối đa)</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Right: Pagination buttons */}
+          {totalPages > 1 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              {/* First page */}
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                style={{ padding: '6px 8px', opacity: validCurrentPage === 1 ? 0.4 : 1, cursor: validCurrentPage === 1 ? 'not-allowed' : 'pointer' }}
+                disabled={validCurrentPage === 1}
+                onClick={() => setCurrentPage(1)}
+                title="Trang đầu"
+              >
+                <ChevronsLeft size={16} />
+              </button>
+
+              {/* Prev page */}
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                style={{ padding: '6px 8px', opacity: validCurrentPage === 1 ? 0.4 : 1, cursor: validCurrentPage === 1 ? 'not-allowed' : 'pointer' }}
+                disabled={validCurrentPage === 1}
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                title="Trang trước"
+              >
+                <ChevronLeft size={16} />
+              </button>
+
+              {/* Page numbers */}
+              {getPageNumbers(validCurrentPage, totalPages).map((p, idx) => {
+                if (p === '...') {
+                  return (
+                    <span key={`ellipsis-${idx}`} style={{ padding: '0 6px', color: '#94a3b8' }}>
+                      ...
+                    </span>
+                  );
+                }
+                const isActive = p === validCurrentPage;
+                return (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setCurrentPage(p)}
+                    style={{
+                      minWidth: 32,
+                      height: 32,
+                      padding: '0 8px',
+                      borderRadius: 6,
+                      fontSize: '0.85rem',
+                      fontWeight: isActive ? 700 : 500,
+                      background: isActive ? '#1e3a8a' : '#f8fafc',
+                      color: isActive ? '#ffffff' : '#334155',
+                      border: isActive ? '1px solid #1e3a8a' : '1px solid #cbd5e1',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s'
+                    }}
+                  >
+                    {p}
+                  </button>
+                );
+              })}
+
+              {/* Next page */}
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                style={{ padding: '6px 8px', opacity: validCurrentPage === totalPages ? 0.4 : 1, cursor: validCurrentPage === totalPages ? 'not-allowed' : 'pointer' }}
+                disabled={validCurrentPage === totalPages}
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                title="Trang sau"
+              >
+                <ChevronRight size={16} />
+              </button>
+
+              {/* Last page */}
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                style={{ padding: '6px 8px', opacity: validCurrentPage === totalPages ? 0.4 : 1, cursor: validCurrentPage === totalPages ? 'not-allowed' : 'pointer' }}
+                disabled={validCurrentPage === totalPages}
+                onClick={() => setCurrentPage(totalPages)}
+                title="Trang cuối"
+              >
+                <ChevronsRight size={16} />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Modals */}
       {isDetailOpen && selectedAsset && (

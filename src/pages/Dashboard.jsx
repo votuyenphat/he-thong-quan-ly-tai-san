@@ -79,7 +79,7 @@ export default function Dashboard({ setActiveTab }) {
 
   // 3. Biểu đồ 1: Tài sản theo phòng (Bar)
   const chartDeptData = {
-    labels: deptStats.map(d => d.code || d.name),
+    labels: deptStats.map(d => d.name || d.code),
     datasets: [
       {
         label: 'Số lượng tài sản',
@@ -352,16 +352,76 @@ export default function Dashboard({ setActiveTab }) {
             <span>Tài sản theo Phòng/Ban & Khoa</span>
             <Building size={18} color="#64748b" />
           </h3>
-          <div style={{ height: '270px' }}>
-            <Bar 
-              data={chartDeptData} 
-              options={{
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } }
-              }} 
-            />
-          </div>
+          {deptStats.length === 0 ? (
+            <div style={{
+              height: '270px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#64748b',
+              textAlign: 'center',
+              background: '#f8fafc',
+              borderRadius: '8px',
+              padding: '20px'
+            }}>
+              <Building size={36} color="#94a3b8" style={{ marginBottom: 10 }} />
+              <p style={{ fontWeight: 600, color: '#334155', margin: '0 0 4px 0', fontSize: '0.9rem' }}>
+                Chưa có dữ liệu phòng ban trong Cây phòng/ban
+              </p>
+              <p style={{ fontSize: '0.8rem', margin: '0 0 12px 0', maxWidth: 300, color: '#64748b' }}>
+                Hãy thêm các phòng ban, khoa vào sơ đồ tổ chức để theo dõi thống kê tài sản.
+              </p>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => setActiveTab('departments')}
+              >
+                Đến Cây Phòng/Ban
+              </button>
+            </div>
+          ) : (
+            <div style={{ height: '270px' }}>
+              <Bar 
+                data={chartDeptData} 
+                options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                      callbacks: {
+                        title: (items) => {
+                          if (!items.length) return '';
+                          const idx = items[0].dataIndex;
+                          const d = deptStats[idx];
+                          return d ? `${d.name} (${d.code})` : items[0].label;
+                        },
+                        label: (ctx) => {
+                          const d = deptStats[ctx.dataIndex];
+                          const valStr = d && d.value > 0 ? ` - ${formatVND(d.value)}` : '';
+                          return ` Số lượng: ${ctx.parsed.y} tài sản${valStr}`;
+                        }
+                      }
+                    }
+                  },
+                  scales: {
+                    x: {
+                      ticks: {
+                        autoSkip: false,
+                        maxRotation: 40,
+                        minRotation: 0,
+                        font: { size: 11 }
+                      }
+                    },
+                    y: {
+                      beginAtZero: true,
+                      ticks: { precision: 0 }
+                    }
+                  }
+                }} 
+              />
+            </div>
+          )}
         </div>
 
         {/* Biểu đồ theo loại */}
@@ -462,27 +522,35 @@ export default function Dashboard({ setActiveTab }) {
               </tr>
             </thead>
             <tbody>
-              {deptStats.map(dept => (
-                <tr key={dept.id}>
-                  <td>
-                    <span style={{ fontWeight: 700, color: '#1e3a8a' }}>{dept.code}</span>
-                  </td>
-                  <td>
-                    <div style={{ fontWeight: 600 }}>{dept.name}</div>
-                    <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{dept.location}</div>
-                  </td>
-                  <td>{dept.manager}</td>
-                  <td>{dept.assetManager}</td>
-                  <td style={{ textAlign: 'center' }}>
-                    <span className="badge badge-info">
-                      {dept.count} tài sản
-                    </span>
-                  </td>
-                  <td style={{ textAlign: 'right', fontWeight: 700, color: '#0f172a' }}>
-                    {formatVND(dept.value)}
+              {deptStats.length === 0 ? (
+                <tr>
+                  <td colSpan="6" style={{ textAlign: 'center', padding: '36px 20px', color: '#64748b' }}>
+                    Chưa có phòng/ban nào trong cây tổ chức. Hãy vào mục <strong>"Quản lý cây phòng ban"</strong> để thiết lập cơ cấu.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                deptStats.map(dept => (
+                  <tr key={dept.id}>
+                    <td>
+                      <span style={{ fontWeight: 700, color: '#1e3a8a' }}>{dept.code}</span>
+                    </td>
+                    <td>
+                      <div style={{ fontWeight: 600 }}>{dept.name}</div>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{dept.location}</div>
+                    </td>
+                    <td>{dept.manager}</td>
+                    <td>{dept.assetManager}</td>
+                    <td style={{ textAlign: 'center' }}>
+                      <span className="badge badge-info">
+                        {dept.count} tài sản
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'right', fontWeight: 700, color: '#0f172a' }}>
+                      {formatVND(dept.value)}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
