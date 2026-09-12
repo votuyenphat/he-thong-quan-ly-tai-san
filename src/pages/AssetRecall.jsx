@@ -33,7 +33,7 @@ export default function AssetRecall() {
   const [isSearchFocused, setIsSearchFocused] = useState(false);
 
   // Form inputs
-  const [reason, setReason] = useState('Thu hồi nhập kho sau khi kết thúc dự án / luân chuyển');
+  const [reason, setReason] = useState('');
   const [condition, setCondition] = useState('Tốt');
 
   const targetAsset = assets.find(a => a.id === selectedAssetId);
@@ -66,7 +66,7 @@ export default function AssetRecall() {
     setSelectedAssetId('');
     setAssetSearchTerm('');
     setIsSearchFocused(false);
-    setReason('Thu hồi nhập kho sau khi kết thúc dự án / luân chuyển');
+    setReason('');
     setCondition('Tốt');
     setIsModalOpen(true);
   };
@@ -465,7 +465,7 @@ export default function AssetRecall() {
                   className="form-input"
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
-                  placeholder="VD: Thu hồi sau kết thúc đề tài, hoàn trả kho..."
+                  placeholder=""
                   required
                 />
               </div>

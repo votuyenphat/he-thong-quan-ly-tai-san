@@ -1,5 +1,5 @@
 // src/pages/AssetLiquidation.jsx
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAssets } from '../context/AssetContext';
 import { useAuth } from '../context/AuthContext';
 import { generateLiquidationCode, formatVND, formatDate } from '../utils/formatters';
@@ -14,9 +14,11 @@ import {
   AlertTriangle,
   DollarSign,
   ShieldCheck,
-  FileCheck
+  FileCheck,
+  Search,
+  X
 } from 'lucide-react';
-import { canonicalStatus } from '../utils/normalize';
+import { canonicalStatus, cleanText } from '../utils/normalize';
 
 export default function AssetLiquidation() {
   const { assets, liquidations, proposeLiquidation, approveLiquidation, completeLiquidation } = useAssets();
@@ -28,15 +30,21 @@ export default function AssetLiquidation() {
   const [selectedPrintLq, setSelectedPrintLq] = useState(null);
 
   // Eligible assets for liquidation proposal
-  const eligibleAssets = assets.filter(a => 
-    canonicalStatus(a.status) !== 'Đã thanh lý' && canonicalStatus(a.status) !== 'Chờ thanh lý'
-  );
+  const eligibleAssets = useMemo(() => {
+    return assets.filter(a => 
+      canonicalStatus(a.status) !== 'Đã thanh lý' && canonicalStatus(a.status) !== 'Chờ thanh lý'
+    );
+  }, [assets]);
 
-  const [selectedAssetId, setSelectedAssetId] = useState(eligibleAssets[0]?.id || '');
-  const [reason, setReason] = useState('Hỏng mạch điện tử chính, chi phí sửa chữa vượt quá 70% giá trị máy mới');
+  // Search & smart suggestions state for selecting asset
+  const [selectedAssetId, setSelectedAssetId] = useState('');
+  const [assetSearchTerm, setAssetSearchTerm] = useState('');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+
+  // Form inputs (không để chữ gợi ý sẵn)
+  const [reason, setReason] = useState('');
   const [method, setMethod] = useState('Bán phế liệu thu hồi nộp ngân sách');
-  const [estPrice, setEstPrice] = useState('500000');
-  const [reportNumber, setReportNumber] = useState('15/TTr-HĐTL');
+  const [estPrice, setEstPrice] = useState('');
 
   // For completing liquidation
   const [finalPrice, setFinalPrice] = useState('');
@@ -44,16 +52,39 @@ export default function AssetLiquidation() {
 
   const targetAsset = assets.find(a => a.id === selectedAssetId);
 
-  const handleOpenCreateModal = () => {
-    if (eligibleAssets.length > 0) {
-      setSelectedAssetId(eligibleAssets[0].id);
+  // Gợi ý thông minh tìm kiếm tài sản thanh lý
+  const filteredAssetSuggestions = useMemo(() => {
+    if (!assetSearchTerm.trim()) {
+      return eligibleAssets.slice(0, 8);
     }
+    const q = cleanText(assetSearchTerm).toLowerCase();
+    return eligibleAssets.filter(a =>
+      cleanText(a.code).toLowerCase().includes(q) ||
+      cleanText(a.name).toLowerCase().includes(q) ||
+      cleanText(a.departmentName).toLowerCase().includes(q) ||
+      cleanText(a.currentUser).toLowerCase().includes(q) ||
+      cleanText(a.locationPath).toLowerCase().includes(q) ||
+      cleanText(a.brand).toLowerCase().includes(q) ||
+      cleanText(a.condition).toLowerCase().includes(q)
+    ).slice(0, 10);
+  }, [eligibleAssets, assetSearchTerm]);
+
+  const handleOpenCreateModal = () => {
+    setSelectedAssetId('');
+    setAssetSearchTerm('');
+    setIsSearchFocused(false);
+    setReason('');
+    setMethod('Bán phế liệu thu hồi nộp ngân sách');
+    setEstPrice('');
     setIsModalOpen(true);
   };
 
   const handleCreateSubmit = (e) => {
     e.preventDefault();
-    if (!targetAsset) return;
+    if (!targetAsset) {
+      alert('Vui lòng tìm kiếm và chọn tài sản cần đề nghị thanh lý!');
+      return;
+    }
 
     const code = generateLiquidationCode(liquidations);
     const newLq = {
@@ -62,11 +93,11 @@ export default function AssetLiquidation() {
       assetCode: targetAsset.code,
       assetName: targetAsset.name,
       originalCost: targetAsset.cost,
-      remainingValue: Math.max(0, Math.floor(targetAsset.cost * 0.05)),
-      reason,
+      remainingValue: Math.max(0, Math.floor((targetAsset.cost || 0) * 0.05)),
+      reason: reason.trim() || 'Đề nghị thanh lý theo quy định',
       method,
       liquidationPrice: Number(estPrice) || 0,
-      reportNumber,
+      reportNumber: code,
       requester: currentUser?.name || 'Cán bộ quản trị tài sản'
     };
 
@@ -296,47 +327,196 @@ export default function AssetLiquidation() {
       >
         <form onSubmit={handleCreateSubmit}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 16 }}>
-            <div className="form-group">
-              <label className="form-label">Chọn tài sản đề nghị thanh lý (*)</label>
-              <select
-                className="form-select"
-                value={selectedAssetId}
-                onChange={(e) => setSelectedAssetId(e.target.value)}
-              >
-                {eligibleAssets.map(a => (
-                  <option key={a.id} value={a.id}>
-                    [{a.code}] {a.name} - (Nguyên giá: {formatVND(a.cost)} - {a.departmentName})
-                  </option>
-                ))}
-              </select>
+            {/* Bộ tìm kiếm tài sản thông minh */}
+            <div className="form-group" style={{ position: 'relative' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <label className="form-label" style={{ marginBottom: 0 }}>
+                  Tìm kiếm & Chọn tài sản đề nghị thanh lý (*)
+                </label>
+                {selectedAssetId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedAssetId('');
+                      setAssetSearchTerm('');
+                      setIsSearchFocused(true);
+                    }}
+                    style={{
+                      border: 'none',
+                      background: 'none',
+                      color: '#2563eb',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      padding: 0
+                    }}
+                  >
+                    🔄 Đổi tài sản khác
+                  </button>
+                )}
+              </div>
+
+              {!selectedAssetId ? (
+                <div style={{ position: 'relative' }}>
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <Search
+                      size={17}
+                      style={{
+                        position: 'absolute',
+                        left: 12,
+                        color: '#64748b',
+                        pointerEvents: 'none'
+                      }}
+                    />
+                    <input
+                      type="text"
+                      className="form-input"
+                      style={{ paddingLeft: 36, paddingRight: assetSearchTerm ? 36 : 12 }}
+                      placeholder="Nhập mã tài sản, tên, đơn vị quản lý, tình trạng để tìm nhanh..."
+                      value={assetSearchTerm}
+                      onChange={(e) => {
+                        setAssetSearchTerm(e.target.value);
+                        setIsSearchFocused(true);
+                      }}
+                      onFocus={() => setIsSearchFocused(true)}
+                    />
+                    {assetSearchTerm && (
+                      <button
+                        type="button"
+                        onClick={() => setAssetSearchTerm('')}
+                        style={{
+                          position: 'absolute',
+                          right: 10,
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          border: 'none',
+                          background: 'transparent',
+                          color: '#94a3b8',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <X size={15} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Dropdown Gợi ý thông minh */}
+                  {isSearchFocused && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        right: 0,
+                        zIndex: 50,
+                        marginTop: 4,
+                        background: '#ffffff',
+                        borderRadius: 8,
+                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+                        border: '1px solid #cbd5e1',
+                        maxHeight: 280,
+                        overflowY: 'auto'
+                      }}
+                    >
+                      <div style={{
+                        padding: '6px 12px',
+                        background: '#f1f5f9',
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        color: '#475569',
+                        borderBottom: '1px solid #e2e8f0',
+                        display: 'flex',
+                        justifyContent: 'space-between'
+                      }}>
+                        <span>GỢI Ý TÀI SẢN CÓ THỂ THANH LÝ ({filteredAssetSuggestions.length})</span>
+                        <span style={{ cursor: 'pointer', color: '#64748b' }} onClick={() => setIsSearchFocused(false)}>Đóng</span>
+                      </div>
+                      {filteredAssetSuggestions.length === 0 ? (
+                        <div style={{ padding: '16px', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>
+                          Không tìm thấy tài sản nào phù hợp với từ khóa "{assetSearchTerm}"
+                        </div>
+                      ) : (
+                        filteredAssetSuggestions.map((a) => (
+                          <div
+                            key={a.id}
+                            onClick={() => {
+                              setSelectedAssetId(a.id);
+                              setAssetSearchTerm(`[${a.code}] ${a.name}`);
+                              setIsSearchFocused(false);
+                            }}
+                            style={{
+                              padding: '10px 14px',
+                              borderBottom: '1px solid #f1f5f9',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 2,
+                              transition: 'background 0.15s ease'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = '#ffffff'}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.875rem' }}>
+                                <span style={{ color: '#2563eb' }}>[{a.code}]</span> {a.name}
+                              </span>
+                              <span className="badge badge-info" style={{ fontSize: '0.7rem' }}>
+                                {a.departmentName || 'Chưa gán đơn vị'}
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', gap: 14, fontSize: '0.775rem', color: '#64748b', flexWrap: 'wrap' }}>
+                              <span>💰 Nguyên giá: <strong>{formatVND(a.cost)}</strong></span>
+                              <span>⚙️ Tình trạng: <strong>{a.condition || 'N/A'}</strong></span>
+                              <span>📍 Vị trí: <strong>{a.locationPath || 'Chưa xếp'}</strong></span>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Card thông tin chi tiết tài sản đã chọn */
+                <div style={{
+                  background: '#f0fdf4',
+                  border: '1px solid #bbf7d0',
+                  borderRadius: '8px',
+                  padding: '12px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 6
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontWeight: 700, color: '#166534', fontSize: '0.95rem' }}>
+                      <span style={{ color: '#047857', background: '#d1fae5', padding: '2px 6px', borderRadius: 4, marginRight: 6 }}>
+                        {targetAsset.code}
+                      </span>
+                      {targetAsset.name}
+                    </div>
+                    <span className="badge badge-success" style={{ fontSize: '0.75rem' }}>Đã chọn</span>
+                  </div>
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                    gap: '6px 12px',
+                    fontSize: '0.825rem',
+                    color: '#374151',
+                    marginTop: 4,
+                    paddingTop: 6,
+                    borderTop: '1px dashed #86efac'
+                  }}>
+                    <div><strong>🏢 Đơn vị quản lý:</strong> {targetAsset.departmentName}</div>
+                    <div><strong>💰 Nguyên giá ban đầu:</strong> {formatVND(targetAsset.cost)}</div>
+                    <div><strong>⚙️ Tình trạng hiện tại:</strong> {targetAsset.condition || 'N/A'}</div>
+                    <div><strong>📍 Vị trí:</strong> {targetAsset.locationPath || 'Chưa cập nhật'}</div>
+                    <div><strong>👤 Người sử dụng:</strong> {targetAsset.currentUser || targetAsset.responsiblePerson || 'N/A'}</div>
+                    <div><strong>🏷️ Nhãn hiệu / Loại:</strong> {targetAsset.brand || targetAsset.type || 'N/A'}</div>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {targetAsset && (
-              <div style={{
-                background: '#f8fafc',
-                padding: '12px 16px',
-                borderRadius: '8px',
-                border: '1px solid #e2e8f0',
-                fontSize: '0.85rem'
-              }}>
-                <div>Nguyên giá ban đầu: <strong>{formatVND(targetAsset.cost)}</strong></div>
-                <div>Đơn vị quản lý: <strong>{targetAsset.departmentName}</strong></div>
-                <div>Tình trạng hiện tại: <strong>{targetAsset.condition}</strong></div>
-              </div>
-            )}
-
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-              <div className="form-group">
-                <label className="form-label">Số tờ trình / Biên bản giám định kỹ thuật</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={reportNumber}
-                  onChange={(e) => setReportNumber(e.target.value)}
-                  required
-                />
-              </div>
-
               <div className="form-group">
                 <label className="form-label">Phương thức thanh lý dự kiến</label>
                 <select
@@ -350,17 +530,17 @@ export default function AssetLiquidation() {
                   <option value="Chuyển nhượng điều chuyển đơn vị ngoài">Chuyển nhượng điều chuyển đơn vị ngoài</option>
                 </select>
               </div>
-            </div>
 
-            <div className="form-group">
-              <label className="form-label">Giá thanh lý dự kiến thu hồi (VNĐ)</label>
-              <input
-                type="number"
-                className="form-input"
-                value={estPrice}
-                onChange={(e) => setEstPrice(e.target.value)}
-                required
-              />
+              <div className="form-group">
+                <label className="form-label">Giá thanh lý dự kiến thu hồi (VNĐ)</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={estPrice}
+                  onChange={(e) => setEstPrice(e.target.value)}
+                  placeholder=""
+                />
+              </div>
             </div>
 
             <div className="form-group">
@@ -369,6 +549,8 @@ export default function AssetLiquidation() {
                 className="form-textarea"
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
+                placeholder=""
+                rows={3}
                 required
               />
             </div>
