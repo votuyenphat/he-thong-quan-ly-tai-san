@@ -23,7 +23,6 @@ export default function Navbar({ setActiveTab }) {
   const totalAlerts = 
     alerts.wrongLocation.length + 
     alerts.missing.length + 
-    alerts.overdueRepair.length + 
     alerts.pendingLiquidation.length + 
     alerts.expiringSoon.length;
 

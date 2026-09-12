@@ -73,7 +73,7 @@ export default function ReportsPage() {
       id: '5',
       name: '5. Báo cáo nhập tài sản mới',
       desc: 'Báo cáo nguồn gốc, kinh phí và danh mục các thiết bị mua mới',
-      headers: ['Mã tài sản', 'Tên tài sản', 'Nhà cung cấp', 'Số hóa đơn', 'Ngày nhập', 'Phòng/Ban', 'Trạng thái', 'Nguyên giá']
+      headers: ['Mã tài sản', 'Tên tài sản', 'Loại tài sản', 'Năm nhập', 'Năm xuất', 'Phòng/Ban', 'Trạng thái', 'Nguyên giá']
     },
     {
       id: '6',
@@ -109,7 +109,7 @@ export default function ReportsPage() {
       id: '11',
       name: '11. Báo cáo biến động tài sản',
       desc: 'Tổng kết tăng/giảm và luân chuyển tài sản theo chu kỳ năm',
-      headers: ['Mã tài sản', 'Tên tài sản', 'Phòng/Ban', 'Ngày nhập', 'Trạng thái', 'Tình trạng', 'Lịch sử sự kiện', 'Nguyên giá']
+      headers: ['Mã tài sản', 'Tên tài sản', 'Phòng/Ban', 'Năm nhập', 'Trạng thái', 'Tình trạng', 'Lịch sử sự kiện', 'Nguyên giá']
     },
     {
       id: '12',
@@ -204,9 +204,9 @@ export default function ReportsPage() {
           stt: i + 1,
           c1: a.code || '---',
           c2: a.name || '---',
-          c3: a.supplier || 'Nhà cung cấp',
-          c4: a.invoiceNumber || 'HD-2026',
-          c5: a.importDate ? formatDate(a.importDate) : '---',
+          c3: a.type || 'Thiết bị',
+          c4: a.importYear || a.purchaseYear || (a.importDate ? String(a.importDate).slice(0, 4) : '---'),
+          c5: a.exportYear || '---',
           c6: a.departmentName || '---',
           c7: a.status || 'Mới',
           num: Number(a.cost) || 0
@@ -286,7 +286,7 @@ export default function ReportsPage() {
       case '10': { // Mất / hỏng
         const badAssets = filteredAssets.filter(a => 
           a.condition === 'Hỏng nặng' || a.condition === 'Hỏng nhẹ' || 
-          a.status === 'Mất' || a.status === 'Đang sửa chữa' || a.status === 'Chờ thanh lý'
+          a.status === 'Mất' || a.status === 'Chờ thanh lý'
         );
         return badAssets.map((a, i) => ({
           stt: i + 1,
@@ -307,7 +307,7 @@ export default function ReportsPage() {
           c1: a.code || '---',
           c2: a.name || '---',
           c3: a.departmentName || '---',
-          c4: a.importDate ? formatDate(a.importDate) : '---',
+          c4: a.importYear || a.purchaseYear || (a.importDate ? String(a.importDate).slice(0, 4) : '---'),
           c5: a.status || 'Đang sử dụng',
           c6: a.condition || 'Tốt',
           c7: (a.history?.length || 1) + ' sự kiện',

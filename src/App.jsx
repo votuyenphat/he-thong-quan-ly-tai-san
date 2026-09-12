@@ -20,6 +20,7 @@ import LocationTree from './pages/LocationTree';
 import AlertsPage from './pages/AlertsPage';
 import ReportsPage from './pages/ReportsPage';
 import AuditLogsPage from './pages/AuditLogsPage';
+import CategoryConfig from './pages/CategoryConfig';
 
 function MainApplication() {
   const { isLoggedIn } = useAuth();
@@ -39,6 +40,8 @@ function MainApplication() {
         return <AssetList setActiveTab={setActiveTab} />;
       case 'inbound':
         return <AssetInbound setActiveTab={setActiveTab} />;
+      case 'categories':
+        return <CategoryConfig />;
       case 'transfer':
         return <AssetTransfer />;
       case 'recall':

@@ -16,6 +16,7 @@ import {
   ShieldCheck,
   FileCheck
 } from 'lucide-react';
+import { canonicalStatus } from '../utils/normalize';
 
 export default function AssetLiquidation() {
   const { assets, liquidations, proposeLiquidation, approveLiquidation, completeLiquidation } = useAssets();
@@ -28,7 +29,7 @@ export default function AssetLiquidation() {
 
   // Eligible assets for liquidation proposal
   const eligibleAssets = assets.filter(a => 
-    a.status !== 'Đã thanh lý' && a.status !== 'Chờ thanh lý'
+    canonicalStatus(a.status) !== 'Đã thanh lý' && canonicalStatus(a.status) !== 'Chờ thanh lý'
   );
 
   const [selectedAssetId, setSelectedAssetId] = useState(eligibleAssets[0]?.id || '');

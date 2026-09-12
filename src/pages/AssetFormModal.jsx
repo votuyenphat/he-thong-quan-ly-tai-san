@@ -2,51 +2,58 @@
 // Modal chỉnh sửa thông tin tài sản
 import React, { useState } from 'react';
 import Modal from '../components/common/Modal';
+import ManageOptionsModal from '../components/common/ManageOptionsModal';
 import { useAssets } from '../context/AssetContext';
 import { useAuth } from '../context/AuthContext';
-import { Save, Edit2 } from 'lucide-react';
+import { Save } from 'lucide-react';
 import { formatVND } from '../utils/formatters';
-
-const ASSET_TYPES = [
-  'Thiết bị CNTT',
-  'Thiết bị văn phòng',
-  'Thiết bị y tế',
-  'Máy móc thiết bị',
-  'Nội thất',
-  'Phương tiện vận tải',
-  'Thiết bị điện',
-  'Thiết bị thực hành',
-  'Khác'
-];
-
-const CONDITIONS = ['Tốt', 'Khá', 'Hỏng nhẹ', 'Hỏng nặng', 'Không sử dụng được'];
-const STATUSES = ['Đang sử dụng', 'Trong kho', 'Đang sửa chữa', 'Điều chuyển', 'Chờ thanh lý'];
+import { canonicalStatus, canonicalCondition, cleanText } from '../utils/normalize';
 
 export default function AssetFormModal({ isOpen, onClose, asset, mode = 'edit' }) {
-  const { updateAsset, departments } = useAssets();
+  const { updateAsset, departments, assetTypeOptions, conditionOptions, statusOptions, assets, locations } = useAssets();
   const { currentUser } = useAuth();
+
+  const locationSuggestions = React.useMemo(() => {
+    const set = new Set();
+    (assets || []).forEach(a => {
+      if (a.locationPath && a.locationPath.trim()) set.add(a.locationPath.trim());
+    });
+    const collectPaths = (nodes, parentPath = '') => {
+      nodes.forEach(n => {
+        const p = parentPath ? `${parentPath} > ${n.name}` : n.name;
+        set.add(p);
+        if (n.children && n.children.length > 0) collectPaths(n.children, p);
+      });
+    };
+    collectPaths(locations || []);
+    return Array.from(set);
+  }, [assets, locations]);
+
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const [optionsTab, setOptionsTab] = useState('types');
+
+  const openOptions = (tab) => {
+    setOptionsTab(tab);
+    setOptionsOpen(true);
+  };
 
   const [formData, setFormData] = useState({
     name: asset?.name || '',
-    type: asset?.type || 'Thiết bị CNTT',
-    category: asset?.category || '',
+    type: asset?.type || assetTypeOptions[0] || 'Thiết bị CNTT',
     brand: asset?.brand || '',
-    model: asset?.model || '',
-    serial: asset?.serial || '',
     quantity: asset?.quantity !== undefined ? asset.quantity : 1,
     unit: asset?.unit || 'Cái',
-    purchaseDate: asset?.purchaseDate || '',
-    supplier: asset?.supplier || '',
-    invoiceNumber: asset?.invoiceNumber || '',
+    importYear: asset?.importYear || asset?.purchaseYear || (asset?.purchaseDate ? String(asset.purchaseDate).slice(0, 4) : new Date().getFullYear()),
+    exportYear: asset?.exportYear ?? '',
     cost: asset?.cost || '',
-    lifespanYears: asset?.lifespanYears || 5,
+    lifespanYears: asset?.lifespanYears ?? '',   // null/undefined → '' = vô hạn
     departmentId: asset?.departmentId || '',
     departmentName: asset?.departmentName || '',
     locationPath: asset?.locationPath || '',
     responsiblePerson: asset?.responsiblePerson || '',
     currentUser: asset?.currentUser || '',
-    condition: asset?.condition || 'Tốt',
-    status: asset?.status || 'Đang sử dụng',
+    condition: canonicalCondition(asset?.condition) || conditionOptions[0] || 'Tốt',
+    status: canonicalStatus(asset?.status) || statusOptions[0] || 'Đang sử dụng',
     notes: asset?.notes || '',
     fundingSource: asset?.fundingSource || ''
   });
@@ -55,30 +62,26 @@ export default function AssetFormModal({ isOpen, onClose, asset, mode = 'edit' }
     if (asset) {
       setFormData({
         name: asset.name || '',
-        type: asset.type || 'Thiết bị CNTT',
-        category: asset.category || '',
+        type: asset.type || assetTypeOptions[0] || 'Thiết bị CNTT',
         brand: asset.brand || '',
-        model: asset.model || '',
-        serial: asset.serial || '',
         quantity: asset.quantity !== undefined ? asset.quantity : 1,
         unit: asset.unit || 'Cái',
-        purchaseDate: asset.purchaseDate || '',
-        supplier: asset.supplier || '',
-        invoiceNumber: asset.invoiceNumber || '',
+        importYear: asset.importYear || asset.purchaseYear || (asset.purchaseDate ? String(asset.purchaseDate).slice(0, 4) : new Date().getFullYear()),
+        exportYear: asset.exportYear ?? '',
         cost: asset.cost || '',
-        lifespanYears: asset.lifespanYears || 5,
+        lifespanYears: asset.lifespanYears ?? '',
         departmentId: asset.departmentId || '',
         departmentName: asset.departmentName || '',
         locationPath: asset.locationPath || '',
         responsiblePerson: asset.responsiblePerson || '',
         currentUser: asset.currentUser || '',
-        condition: asset.condition || 'Tốt',
-        status: asset.status || 'Đang sử dụng',
+        condition: canonicalCondition(asset.condition) || conditionOptions[0] || 'Tốt',
+        status: canonicalStatus(asset.status) || statusOptions[0] || 'Đang sử dụng',
         notes: asset.notes || '',
         fundingSource: asset.fundingSource || ''
       });
     }
-  }, [asset]);
+  }, [asset, assetTypeOptions, conditionOptions, statusOptions]);
 
   const [saved, setSaved] = useState(false);
 
@@ -96,12 +99,21 @@ export default function AssetFormModal({ isOpen, onClose, asset, mode = 'edit' }
     e.preventDefault();
     if (!formData.name.trim()) return;
 
+    const lifespanVal = formData.lifespanYears === '' ? null : Number(formData.lifespanYears);
+    const impYear = Number(formData.importYear) || new Date().getFullYear();
+    const expYear = formData.exportYear ? Number(formData.exportYear) : null;
+
     updateAsset(asset.id, {
       ...formData,
       quantity: Math.max(1, Number(formData.quantity) || 1),
       unit: formData.unit?.trim() || 'Cái',
       cost: Number(formData.cost) || 0,
-      lifespanYears: Number(formData.lifespanYears) || 5
+      lifespanYears: lifespanVal,
+      importYear: impYear,
+      purchaseYear: impYear,
+      exportYear: expYear,
+      purchaseDate: `${impYear}-01-01`,
+      importDate: `${impYear}-01-01`
     });
 
     setSaved(true);
@@ -145,31 +157,38 @@ export default function AssetFormModal({ isOpen, onClose, asset, mode = 'edit' }
             />
           </div>
           <div>
-            <label className="form-label">Loại tài sản</label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <label className="form-label">Loại tài sản</label>
+              <button
+                type="button"
+                onClick={() => openOptions('types')}
+                style={{
+                  border: 'none',
+                  background: 'none',
+                  color: '#2563eb',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  padding: 0
+                }}
+              >
+                + Tùy biến
+              </button>
+            </div>
             <select
               className="form-select"
               value={formData.type}
               onChange={e => setFormData(p => ({ ...p, type: e.target.value }))}
             >
-              {ASSET_TYPES.map(t => <option key={t}>{t}</option>)}
+              {assetTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
         </div>
 
-        {/* Row 2 */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, marginBottom: 14 }}>
-          <div>
-            <label className="form-label">Nhãn hiệu</label>
-            <input className="form-input" value={formData.brand} onChange={e => setFormData(p => ({ ...p, brand: e.target.value }))} />
-          </div>
-          <div>
-            <label className="form-label">Model</label>
-            <input className="form-input" value={formData.model} onChange={e => setFormData(p => ({ ...p, model: e.target.value }))} />
-          </div>
-          <div>
-            <label className="form-label">Serial Number</label>
-            <input className="form-input" value={formData.serial} onChange={e => setFormData(p => ({ ...p, serial: e.target.value }))} />
-          </div>
+        {/* Row 2: Nhãn hiệu */}
+        <div style={{ marginBottom: 14 }}>
+          <label className="form-label">Nhãn hiệu</label>
+          <input className="form-input" value={formData.brand} onChange={e => setFormData(p => ({ ...p, brand: e.target.value }))} />
         </div>
 
         {/* Row 3: Số lượng & Đơn vị & Giá trị */}
@@ -221,23 +240,42 @@ export default function AssetFormModal({ isOpen, onClose, asset, mode = 'edit' }
           </div>
         </div>
 
-        {/* Row 3b: Ngày mua & Hạn sử dụng */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+        {/* Row 3b: Năm nhập, Năm xuất & Thời hạn sử dụng */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, marginBottom: 14 }}>
           <div>
-            <label className="form-label">Ngày mua</label>
+            <label className="form-label">Năm nhập kho</label>
             <input
               className="form-input"
-              type="date"
-              value={formData.purchaseDate}
-              onChange={e => setFormData(p => ({ ...p, purchaseDate: e.target.value }))}
+              type="number"
+              min={1990}
+              max={2100}
+              placeholder="VD: 2026"
+              value={formData.importYear}
+              onChange={e => setFormData(p => ({ ...p, importYear: e.target.value }))}
             />
           </div>
           <div>
-            <label className="form-label">Hạn sử dụng (năm)</label>
+            <label className="form-label">Năm xuất kho</label>
+            <input
+              className="form-input"
+              type="number"
+              min={1990}
+              max={2100}
+              placeholder="Để trống nếu chưa xuất"
+              value={formData.exportYear}
+              onChange={e => setFormData(p => ({ ...p, exportYear: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              Thời hạn SD (năm)
+              <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 400 }}>— trống = vô hạn</span>
+            </label>
             <input
               className="form-input"
               type="number"
               min={1}
+              placeholder="Để trống nếu không giới hạn"
               value={formData.lifespanYears}
               onChange={e => setFormData(p => ({ ...p, lifespanYears: e.target.value }))}
             />
@@ -266,7 +304,13 @@ export default function AssetFormModal({ isOpen, onClose, asset, mode = 'edit' }
               value={formData.locationPath}
               onChange={e => setFormData(p => ({ ...p, locationPath: e.target.value }))}
               placeholder="VD: Cơ sở 1 > Khu A > Tầng 1 > Phòng 101"
+              list="edit-location-list"
             />
+            <datalist id="edit-location-list">
+              {locationSuggestions.map(loc => (
+                <option key={loc} value={loc} />
+              ))}
+            </datalist>
           </div>
         </div>
 
@@ -293,23 +337,57 @@ export default function AssetFormModal({ isOpen, onClose, asset, mode = 'edit' }
         {/* Row 6 */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
           <div>
-            <label className="form-label">Tình trạng hiện tại</label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <label className="form-label">Tình trạng hiện tại</label>
+              <button
+                type="button"
+                onClick={() => openOptions('conditions')}
+                style={{
+                  border: 'none',
+                  background: 'none',
+                  color: '#2563eb',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  padding: 0
+                }}
+              >
+                + Tùy biến
+              </button>
+            </div>
             <select
               className="form-select"
               value={formData.condition}
               onChange={e => setFormData(p => ({ ...p, condition: e.target.value }))}
             >
-              {CONDITIONS.map(c => <option key={c}>{c}</option>)}
+              {conditionOptions.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
           <div>
-            <label className="form-label">Trạng thái sử dụng</label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <label className="form-label">Trạng thái sử dụng</label>
+              <button
+                type="button"
+                onClick={() => openOptions('statuses')}
+                style={{
+                  border: 'none',
+                  background: 'none',
+                  color: '#2563eb',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  padding: 0
+                }}
+              >
+                + Tùy biến
+              </button>
+            </div>
             <select
               className="form-select"
               value={formData.status}
               onChange={e => setFormData(p => ({ ...p, status: e.target.value }))}
             >
-              {STATUSES.map(s => <option key={s}>{s}</option>)}
+              {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
         </div>
@@ -326,6 +404,12 @@ export default function AssetFormModal({ isOpen, onClose, asset, mode = 'edit' }
           />
         </div>
       </form>
+
+      <ManageOptionsModal
+        isOpen={optionsOpen}
+        onClose={() => setOptionsOpen(false)}
+        initialTab={optionsTab}
+      />
     </Modal>
   );
 }

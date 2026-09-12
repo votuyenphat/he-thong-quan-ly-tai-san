@@ -271,7 +271,7 @@ export default function InventoryCompare() {
                   <td>
                     <div style={{ fontWeight: 600 }}>{res.asset.name}</div>
                     <div style={{ fontSize: '0.725rem', color: '#64748b' }}>
-                      {res.asset.brand} - {res.asset.model}
+                      {res.asset.brand ? `${res.asset.brand} • ` : ''}{res.asset.type}
                     </div>
                   </td>
                   <td style={{ textAlign: 'center' }}>

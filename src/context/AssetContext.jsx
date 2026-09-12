@@ -11,6 +11,13 @@ import {
   INITIAL_AUDIT_LOGS
 } from '../data/mockData';
 import { useAuth } from './AuthContext';
+import {
+  cleanText,
+  canonicalStatus,
+  canonicalCondition,
+  sanitizeAsset,
+  sanitizeAssetList
+} from '../utils/normalize';
 
 const AssetContext = createContext();
 
@@ -34,8 +41,10 @@ export function AssetProvider({ children }) {
   // Load from localStorage or defaults
   const [assets, setAssets] = useState(() => {
     const s = localStorage.getItem('qlts_assets');
-    return s ? JSON.parse(s) : INITIAL_ASSETS;
+    const raw = s ? JSON.parse(s) : INITIAL_ASSETS;
+    return sanitizeAssetList(raw);
   });
+
 
   const [departments, setDepartments] = useState(() => {
     const s = localStorage.getItem('qlts_departments');
@@ -72,6 +81,59 @@ export function AssetProvider({ children }) {
     return s ? JSON.parse(s) : INITIAL_AUDIT_LOGS;
   });
 
+  // --- Custom select options (Loại tài sản, Tình trạng, Trạng thái) ---
+  const DEFAULT_ASSET_TYPES = [
+    'Thiết bị CNTT', 'Thiết bị Thí nghiệm', 'Thiết bị Xưởng',
+    'Thiết bị Giảng dạy', 'Thiết bị Văn phòng', 'Bàn ghế & Nội thất',
+    'Phương tiện vận tải', 'Khác'
+  ];
+  const DEFAULT_CONDITIONS = ['Tốt', 'Khá', 'Hỏng nhẹ', 'Hỏng nặng', 'Không sử dụng được'];
+  const DEFAULT_STATUSES = [
+    'Đang sử dụng', 'Trong kho',
+    'Điều chuyển', 'Chờ thanh lý', 'Đã thanh lý', 'Đã thu hồi', 'Mất'
+  ];
+
+  const [assetTypeOptions, setAssetTypeOptions] = useState(() => {
+    const s = localStorage.getItem('qlts_asset_types');
+    const raw = s ? JSON.parse(s) : DEFAULT_ASSET_TYPES;
+    return Array.from(new Set((raw || []).map(cleanText).filter(Boolean)));
+  });
+  const [conditionOptions, setConditionOptions] = useState(() => {
+    const s = localStorage.getItem('qlts_conditions');
+    const raw = s ? JSON.parse(s) : DEFAULT_CONDITIONS;
+    return Array.from(new Set((raw || []).map(canonicalCondition).filter(Boolean)));
+  });
+  const [statusOptions, setStatusOptions] = useState(() => {
+    const s = localStorage.getItem('qlts_statuses');
+    const raw = s ? JSON.parse(s) : DEFAULT_STATUSES;
+    return Array.from(new Set((raw || []).map(canonicalStatus).filter(Boolean)));
+  });
+
+  // Tự động kiểm tra và chuẩn hóa (auto-heal) toàn bộ dữ liệu tài sản đã lưu trong localStorage
+  useEffect(() => {
+    let hasDirtyData = false;
+    const healed = assets.map(a => {
+      const clean = sanitizeAsset(a);
+      if (
+        clean.status !== a.status ||
+        clean.condition !== a.condition ||
+        clean.departmentName !== a.departmentName ||
+        clean.type !== a.type ||
+        clean.name !== a.name
+      ) {
+        hasDirtyData = true;
+        return clean;
+      }
+      return a;
+    });
+
+    if (hasDirtyData) {
+      setAssets(healed);
+      localStorage.setItem('qlts_assets', JSON.stringify(healed));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Sync back to localStorage
   useEffect(() => { localStorage.setItem('qlts_assets', JSON.stringify(assets)); }, [assets]);
   useEffect(() => { localStorage.setItem('qlts_departments', JSON.stringify(departments)); }, [departments]);
@@ -81,6 +143,79 @@ export function AssetProvider({ children }) {
   useEffect(() => { localStorage.setItem('qlts_liquidations', JSON.stringify(liquidations)); }, [liquidations]);
   useEffect(() => { localStorage.setItem('qlts_inventory_sessions', JSON.stringify(inventorySessions)); }, [inventorySessions]);
   useEffect(() => { localStorage.setItem('qlts_audit_logs', JSON.stringify(auditLogs)); }, [auditLogs]);
+  useEffect(() => { localStorage.setItem('qlts_asset_types', JSON.stringify(assetTypeOptions)); }, [assetTypeOptions]);
+  useEffect(() => { localStorage.setItem('qlts_conditions', JSON.stringify(conditionOptions)); }, [conditionOptions]);
+  useEffect(() => { localStorage.setItem('qlts_statuses', JSON.stringify(statusOptions)); }, [statusOptions]);
+
+
+  // Helper functions to manage dynamic options
+  const addAssetType = (name) => {
+    const trimmed = name.trim();
+    if (!trimmed || assetTypeOptions.includes(trimmed)) return;
+    setAssetTypeOptions(prev => [...prev, trimmed]);
+    addAuditLog('Cập nhật danh mục', trimmed, 'Thêm loại tài sản mới');
+  };
+
+  const deleteAssetType = (name) => {
+    setAssetTypeOptions(prev => prev.filter(t => t !== name));
+    addAuditLog('Cập nhật danh mục', name, 'Xóa loại tài sản');
+  };
+
+  const updateAssetType = (oldName, newName) => {
+    const trimmed = newName.trim();
+    if (!trimmed || trimmed === oldName) return;
+    setAssetTypeOptions(prev => prev.map(t => t === oldName ? trimmed : t));
+    // Cập nhật cả các tài sản đang mang giá trị này
+    setAssets(prev => prev.map(a => a.type === oldName ? { ...a, type: trimmed } : a));
+    addAuditLog('Cập nhật danh mục', `${oldName} -> ${trimmed}`, 'Đổi tên loại tài sản');
+  };
+
+  const addCondition = (name) => {
+    const trimmed = name.trim();
+    if (!trimmed || conditionOptions.includes(trimmed)) return;
+    setConditionOptions(prev => [...prev, trimmed]);
+    addAuditLog('Cập nhật danh mục', trimmed, 'Thêm tình trạng mới');
+  };
+
+  const deleteCondition = (name) => {
+    setConditionOptions(prev => prev.filter(c => c !== name));
+    addAuditLog('Cập nhật danh mục', name, 'Xóa tình trạng');
+  };
+
+  const updateCondition = (oldName, newName) => {
+    const trimmed = newName.trim();
+    if (!trimmed || trimmed === oldName) return;
+    setConditionOptions(prev => prev.map(c => c === oldName ? trimmed : c));
+    setAssets(prev => prev.map(a => a.condition === oldName ? { ...a, condition: trimmed } : a));
+    addAuditLog('Cập nhật danh mục', `${oldName} -> ${trimmed}`, 'Đổi tên tình trạng');
+  };
+
+  const addStatus = (name) => {
+    const trimmed = name.trim();
+    if (!trimmed || statusOptions.includes(trimmed)) return;
+    setStatusOptions(prev => [...prev, trimmed]);
+    addAuditLog('Cập nhật danh mục', trimmed, 'Thêm trạng thái mới');
+  };
+
+  const deleteStatus = (name) => {
+    setStatusOptions(prev => prev.filter(s => s !== name));
+    addAuditLog('Cập nhật danh mục', name, 'Xóa trạng thái');
+  };
+
+  const updateStatus = (oldName, newName) => {
+    const trimmed = newName.trim();
+    if (!trimmed || trimmed === oldName) return;
+    setStatusOptions(prev => prev.map(s => s === oldName ? trimmed : s));
+    setAssets(prev => prev.map(a => a.status === oldName ? { ...a, status: trimmed } : a));
+    addAuditLog('Cập nhật danh mục', `${oldName} -> ${trimmed}`, 'Đổi tên trạng thái');
+  };
+
+  const resetOptionsToDefault = () => {
+    setAssetTypeOptions(DEFAULT_ASSET_TYPES);
+    setConditionOptions(DEFAULT_CONDITIONS);
+    setStatusOptions(DEFAULT_STATUSES);
+    addAuditLog('Cập nhật danh mục', 'Khôi phục', 'Khôi phục danh mục phân loại về mặc định');
+  };
 
   // Log action helper (Immutable)
   const addAuditLog = (action, target, detail) => {
@@ -107,7 +242,7 @@ export function AssetProvider({ children }) {
   const addAsset = (newAssetData) => {
     const newId = `as-${Date.now()}`;
     const dateStr = new Date().toISOString().slice(0, 10);
-    const asset = {
+    const rawAsset = {
       id: newId,
       ...newAssetData,
       history: [
@@ -116,11 +251,12 @@ export function AssetProvider({ children }) {
           date: dateStr,
           action: 'Nhập tài sản mới',
           actor: currentUser ? currentUser.name : 'Thủ kho',
-          detail: `Nhập vào hệ thống theo phiếu/chứng từ: ${newAssetData.invoiceNumber || 'Mới'}`
+          detail: 'Nhập mới vào danh mục quản lý hệ thống'
         }
       ],
       documents: newAssetData.documents || []
     };
+    const asset = sanitizeAsset(rawAsset);
 
     setAssets(prev => [asset, ...prev]);
     addAuditLog('Nhập tài sản mới', `${asset.name} (${asset.code})`, `Nguyên giá: ${asset.cost} đ, Phòng ban: ${asset.departmentName}`);
@@ -130,7 +266,8 @@ export function AssetProvider({ children }) {
   // Batch import assets from Excel
   const importAssetsBatch = (importedList) => {
     const dateStr = new Date().toISOString().slice(0, 10);
-    const newAssets = importedList.map((item, idx) => ({
+    const cleanedList = sanitizeAssetList(importedList);
+    const newAssets = cleanedList.map((item, idx) => ({
       ...item,
       id: `as-${Date.now()}-${idx}`,
       history: [
@@ -160,16 +297,18 @@ export function AssetProvider({ children }) {
           actor: currentUser ? currentUser.name : 'Người dùng',
           detail: 'Chỉnh sửa thông số tài sản'
         };
-        return {
+        const updated = sanitizeAsset({
           ...a,
           ...updatedFields,
           history: [historyEntry, ...(a.history || [])]
-        };
+        });
+        return updated;
       }
       return a;
     }));
     addAuditLog('Cập nhật tài sản', `ID: ${id}`, `Người thực hiện: ${currentUser?.name}`);
   };
+
 
   // Delete Asset
   const deleteAsset = (id) => {
@@ -503,18 +642,22 @@ export function AssetProvider({ children }) {
 
   // Smart Alerts Calculation
   const alerts = {
-    wrongLocation: assets.filter(a => a.status === 'Đang sử dụng' && a.condition === 'Khá' && a.id === 'as-012'), // flagged or evaluated
-    missing: assets.filter(a => a.status === 'Mất'),
-    overdueRepair: assets.filter(a => a.status === 'Đang sửa chữa'),
-    pendingLiquidation: assets.filter(a => a.status === 'Chờ thanh lý'),
+    wrongLocation: assets.filter(a => canonicalStatus(a.status) === 'Đang sử dụng' && canonicalCondition(a.condition) === 'Khá' && a.id === 'as-012'), // flagged or evaluated
+    missing: assets.filter(a => canonicalStatus(a.status) === 'Mất'),
+    pendingLiquidation: assets.filter(a => canonicalStatus(a.status) === 'Chờ thanh lý'),
     expiringSoon: assets.filter(a => {
-      if (!a.purchaseDate || !a.lifespanYears) return false;
-      const purchaseYear = new Date(a.purchaseDate).getFullYear();
-      const expireYear = purchaseYear + a.lifespanYears;
+      // Nếu không điền thời gian sử dụng (hoặc null, rỗng, <=0) => xem như Vô hạn, KHÔNG CẢNH BÁO
+      if (!a.lifespanYears || Number(a.lifespanYears) <= 0) return false;
+      const rawYear = a.purchaseYear || a.importYear || (a.purchaseDate ? new Date(a.purchaseDate).getFullYear() : null);
+      if (!rawYear) return false;
+      const purchaseYear = Number(rawYear);
+      if (isNaN(purchaseYear)) return false;
+      const expireYear = purchaseYear + Number(a.lifespanYears);
       const currentYear = new Date().getFullYear();
-      return expireYear <= currentYear + 1 && a.status !== 'Đã thanh lý';
+      return expireYear <= currentYear + 1 && canonicalStatus(a.status) !== 'Đã thanh lý';
     })
   };
+
 
   // Reset demo data helper
   const resetToDemoData = () => {
@@ -584,6 +727,57 @@ export function AssetProvider({ children }) {
     addAuditLog('Cập nhật vị trí', updatedData.name || id, `Chỉnh sửa thông tin vị trí`);
   };
 
+  const syncLocationsFromAssets = (customAssets = null) => {
+    const list = customAssets || assets;
+    const LEVEL_TYPES = [
+      { type: 'CAMPUS', label: 'Cơ sở' },
+      { type: 'AREA', label: 'Khu/Tòa' },
+      { type: 'FLOOR', label: 'Tầng' },
+      { type: 'ROOM', label: 'Phòng' }
+    ];
+
+    const rootNodes = JSON.parse(JSON.stringify(locations || []));
+
+    list.forEach(asset => {
+      if (!asset.locationPath || !asset.locationPath.trim()) return;
+
+      const parts = asset.locationPath
+        .split(/\s*[>/]\s*/)
+        .map(p => p.trim())
+        .filter(Boolean);
+
+      if (parts.length === 0) return;
+
+      let currentLevelNodes = rootNodes;
+      let currentPath = '';
+
+      parts.forEach((partName, idx) => {
+        currentPath = currentPath ? `${currentPath} > ${partName}` : partName;
+        let node = currentLevelNodes.find(n => n.name.toLowerCase() === partName.toLowerCase());
+
+        if (!node) {
+          const depth = Math.min(idx, 3);
+          node = {
+            id: `loc-auto-${encodeURIComponent(currentPath).replace(/%/g, '').slice(0, 35)}-${idx}`,
+            name: partName,
+            code: partName.slice(0, 10).toUpperCase(),
+            type: LEVEL_TYPES[depth]?.type || 'ROOM',
+            children: []
+          };
+          currentLevelNodes.push(node);
+        } else {
+          if (!node.children) node.children = [];
+        }
+
+        currentLevelNodes = node.children;
+      });
+    });
+
+    setLocations(rootNodes);
+    addAuditLog('Đồng bộ vị trí', 'Cây địa lý', `Đồng bộ cây vị trí địa lý từ danh mục ${list.length} tài sản`);
+    return rootNodes;
+  };
+
   const deleteLocation = (id) => {
     setLocations(prev => deleteNodeInTree(prev, id));
     addAuditLog('Xóa vị trí', id, `Xóa vị trí khỏi cây địa lý`);
@@ -616,12 +810,22 @@ export function AssetProvider({ children }) {
       assets,
       departments,
       locations,
+      setLocations,
+      syncLocationsFromAssets,
       transfers,
       recalls,
       liquidations,
       inventorySessions,
       auditLogs,
       alerts,
+      // Custom option lists & actions
+      assetTypeOptions, setAssetTypeOptions,
+      conditionOptions, setConditionOptions,
+      statusOptions, setStatusOptions,
+      addAssetType, deleteAssetType, updateAssetType,
+      addCondition, deleteCondition, updateCondition,
+      addStatus, deleteStatus, updateStatus,
+      resetOptionsToDefault,
       addAsset,
       importAssetsBatch,
       updateAsset,

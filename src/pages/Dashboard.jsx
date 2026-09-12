@@ -31,6 +31,12 @@ import {
   ArrowRight
 } from 'lucide-react';
 
+import {
+  cleanText,
+  canonicalStatus,
+  canonicalCondition
+} from '../utils/normalize';
+
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -47,20 +53,23 @@ ChartJS.register(
 export default function Dashboard({ setActiveTab }) {
   const { assets, departments, alerts } = useAssets();
 
-  // 1. KPI Counts
+  // 1. KPI Counts (chuẩn hóa trạng thái và tình trạng)
   const totalAssetCodes = assets.length;
   const totalAssets = assets.reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
-  const inUseCount = assets.filter(a => a.status === 'Đang sử dụng').reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
-  const inStockCount = assets.filter(a => a.status === 'Trong kho').reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
-  const repairingCount = assets.filter(a => a.status === 'Đang sửa chữa' || a.condition === 'Hỏng nhẹ' || a.condition === 'Hỏng nặng').reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
-  const pendingLiquidationCount = assets.filter(a => a.status === 'Chờ thanh lý').reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
-  const liquidatedCount = assets.filter(a => a.status === 'Đã thanh lý').reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
+  const inUseCount = assets.filter(a => canonicalStatus(a.status) === 'Đang sử dụng').reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
+  const inStockCount = assets.filter(a => canonicalStatus(a.status) === 'Trong kho').reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
+  const repairingCount = assets.filter(a => ['Hỏng nhẹ', 'Hỏng nặng'].includes(canonicalCondition(a.condition))).reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
+  const pendingLiquidationCount = assets.filter(a => canonicalStatus(a.status) === 'Chờ thanh lý').reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
+  const liquidatedCount = assets.filter(a => canonicalStatus(a.status) === 'Đã thanh lý').reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
 
   const totalValue = assets.reduce((sum, a) => sum + ((Number(a.cost) || 0) * (Number(a.quantity) || 1)), 0);
 
-  // 2. Thống kê theo phòng
+  // 2. Thống kê theo phòng (so sánh chuẩn hóa)
   const deptStats = departments.map(dept => {
-    const deptAssets = assets.filter(a => a.departmentId === dept.id || a.departmentName === dept.name);
+    const deptAssets = assets.filter(a =>
+      cleanText(a.departmentId).toLowerCase() === cleanText(dept.id).toLowerCase() ||
+      cleanText(a.departmentName).toLowerCase() === cleanText(dept.name).toLowerCase()
+    );
     const count = deptAssets.reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
     const value = deptAssets.reduce((sum, a) => sum + ((Number(a.cost) || 0) * (Number(a.quantity) || 1)), 0);
     return {
@@ -86,7 +95,7 @@ export default function Dashboard({ setActiveTab }) {
   // 4. Biểu đồ 2: Tài sản theo loại (Doughnut)
   const typeMap = {};
   assets.forEach(a => {
-    const t = a.type || 'Khác';
+    const t = cleanText(a.type) || 'Khác';
     typeMap[t] = (typeMap[t] || 0) + (Number(a.quantity) || 1);
   });
   const chartTypeData = {
@@ -105,12 +114,14 @@ export default function Dashboard({ setActiveTab }) {
   const conditionMap = { 'Tốt': 0, 'Khá': 0, 'Hỏng nhẹ': 0, 'Hỏng nặng': 0, 'Không sử dụng được': 0 };
   assets.forEach(a => {
     const qty = Number(a.quantity) || 1;
-    if (conditionMap[a.condition] !== undefined) {
-      conditionMap[a.condition] += qty;
+    const cond = canonicalCondition(a.condition);
+    if (conditionMap[cond] !== undefined) {
+      conditionMap[cond] += qty;
     } else {
       conditionMap['Khác'] = (conditionMap['Khác'] || 0) + qty;
     }
   });
+
   const chartConditionData = {
     labels: Object.keys(conditionMap),
     datasets: [
@@ -172,7 +183,6 @@ export default function Dashboard({ setActiveTab }) {
   const alertCards = [
     { title: 'Sai vị trí thực tế', count: alerts.wrongLocation.length, color: '#ea580c', bg: '#ffedd5', tab: 'alerts' },
     { title: 'Không tìm thấy (Thất lạc)', count: alerts.missing.length, color: '#dc2626', bg: '#fee2e2', tab: 'alerts' },
-    { title: 'Đang sửa chữa cần theo dõi', count: alerts.overdueRepair.length, color: '#2563eb', bg: '#eff6ff', tab: 'alerts' },
     { title: 'Đề nghị thanh lý chờ duyệt', count: alerts.pendingLiquidation.length, color: '#d97706', bg: '#fef3c7', tab: 'liquidation' },
     { title: 'Sắp hết thời gian sử dụng', count: alerts.expiringSoon.length, color: '#7c3aed', bg: '#f5f3ff', tab: 'alerts' },
   ];

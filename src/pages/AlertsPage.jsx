@@ -7,7 +7,6 @@ import {
   ShieldAlert,
   AlertTriangle,
   Clock,
-  Wrench,
   HelpCircle,
   Calendar,
   ArrowRight,
@@ -38,16 +37,6 @@ export default function AlertsPage({ setActiveTab }) {
       bg: '#fee2e2',
       list: alerts.missing,
       desc: 'Tài sản được ghi nhận mất dấu hoặc không tìm thấy tại vị trí được giao'
-    },
-    {
-      id: 'overdueRepair',
-      title: 'Đang sửa chữa quá hạn',
-      count: alerts.overdueRepair.length,
-      icon: Wrench,
-      color: '#2563eb',
-      bg: '#eff6ff',
-      list: alerts.overdueRepair,
-      desc: 'Thiết bị gửi đi bảo hành, sửa chữa quá thời hạn dự kiến chưa bàn giao lại kho'
     },
     {
       id: 'pendingLiquidation',
@@ -191,7 +180,7 @@ export default function AlertsPage({ setActiveTab }) {
                     <td>
                       <div style={{ fontWeight: 600 }}>{asset.name}</div>
                       <div style={{ fontSize: '0.725rem', color: '#64748b' }}>
-                        {asset.brand} - {asset.model}
+                        {asset.brand ? `${asset.brand} • ` : ''}{asset.type}
                       </div>
                     </td>
                     <td>{asset.departmentName}</td>

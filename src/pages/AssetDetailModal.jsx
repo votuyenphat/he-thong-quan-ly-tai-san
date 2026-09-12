@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import Modal from '../components/common/Modal';
 import { ConditionBadge, StatusBadge } from '../components/common/Badge';
-import { formatVND, formatDate } from '../utils/formatters';
+import { formatVND } from '../utils/formatters';
 import { useAssets } from '../context/AssetContext';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -129,20 +129,8 @@ export default function AssetDetailModal({ isOpen, onClose, asset, onOpenQR }) {
               <div style={{ fontWeight: 600, color: '#0f172a' }}>{asset.type || '---'}</div>
             </div>
             <div>
-              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Nhóm / Phân khúc</div>
-              <div style={{ fontWeight: 600, color: '#0f172a' }}>{asset.category || '---'}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Nhãn hiệu / Nhà SX</div>
+              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Nhãn hiệu / Hãng SX</div>
               <div style={{ fontWeight: 600, color: '#0f172a' }}>{asset.brand || '---'}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Model / Quy cách</div>
-              <div style={{ fontWeight: 600, color: '#0f172a' }}>{asset.model || '---'}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Số Serial Number</div>
-              <div style={{ fontWeight: 600, color: '#0f172a', fontFamily: 'monospace' }}>{asset.serial || '---'}</div>
             </div>
             <div>
               <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Số lượng & Đơn vị</div>
@@ -164,24 +152,26 @@ export default function AssetDetailModal({ isOpen, onClose, asset, onOpenQR }) {
               </div>
             </div>
             <div>
-              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Ngày mua / Ngày nhập</div>
+              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Năm nhập kho</div>
               <div style={{ fontWeight: 600, color: '#0f172a' }}>
-                {formatDate(asset.purchaseDate)} (Nhập: {formatDate(asset.importDate)})
+                {asset.importYear || asset.purchaseYear || (asset.purchaseDate ? String(asset.purchaseDate).slice(0, 4) : '---')}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Năm xuất kho</div>
+              <div style={{ fontWeight: 600, color: asset.exportYear ? '#ea580c' : '#059669' }}>
+                {asset.exportYear ? asset.exportYear : 'Chưa xuất (Đang quản lý)'}
               </div>
             </div>
             <div>
               <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Thời hạn sử dụng</div>
               <div style={{ fontWeight: 600, color: '#0f172a' }}>
-                {asset.lifespanYears} năm (Hạn BH: {formatDate(asset.warrantyEnd)})
+                {asset.lifespanYears ? `${asset.lifespanYears} năm` : 'Vô hạn (Không giới hạn)'}
               </div>
             </div>
             <div>
-              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Nhà cung cấp</div>
-              <div style={{ fontWeight: 600, color: '#0f172a' }}>{asset.supplier || '---'}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Số chứng từ / Hóa đơn</div>
-              <div style={{ fontWeight: 600, color: '#0f172a' }}>{asset.invoiceNumber || '---'}</div>
+              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Nguồn kinh phí</div>
+              <div style={{ fontWeight: 600, color: '#0f172a' }}>{asset.fundingSource || '---'}</div>
             </div>
           </div>
 

@@ -14,6 +14,7 @@ import {
   ShieldAlert,
   Layers
 } from 'lucide-react';
+import { canonicalStatus } from '../utils/normalize';
 
 export default function AssetRecall() {
   const { assets, recalls, createRecall } = useAssets();
@@ -23,7 +24,7 @@ export default function AssetRecall() {
   const [selectedPrintRecall, setSelectedPrintRecall] = useState(null);
 
   // Available assets currently in use
-  const inUseAssets = assets.filter(a => a.status === 'Đang sử dụng');
+  const inUseAssets = assets.filter(a => canonicalStatus(a.status) === 'Đang sử dụng');
 
   const [selectedAssetId, setSelectedAssetId] = useState(inUseAssets[0]?.id || '');
   const [reason, setReason] = useState('Thu hồi nhập kho sau khi kết thúc dự án / luân chuyển');

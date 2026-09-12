@@ -5,6 +5,7 @@ import { useAssets } from '../context/AssetContext';
 import { useAuth } from '../context/AuthContext';
 import { formatVND } from '../utils/formatters';
 import { ConditionBadge, StatusBadge } from '../components/common/Badge';
+import { cleanText } from '../utils/normalize';
 import {
   FolderTree, Building2, Users, MapPin, Phone, Boxes,
   ChevronRight, Shield, UserCheck, Plus, Edit2, Trash2,
@@ -27,7 +28,10 @@ export default function DepartmentTree() {
 
   const [selectedDeptId, setSelectedDeptId] = useState(departments[0]?.id || '');
   const activeDept = departments.find(d => d.id === selectedDeptId) || departments[0];
-  const deptAssets = assets.filter(a => a.departmentId === activeDept?.id || a.departmentName === activeDept?.name);
+  const deptAssets = assets.filter(a =>
+    (activeDept?.id && cleanText(a.departmentId).toLowerCase() === cleanText(activeDept.id).toLowerCase()) ||
+    (activeDept?.name && cleanText(a.departmentName).toLowerCase() === cleanText(activeDept.name).toLowerCase())
+  );
   const deptTotalValue = deptAssets.reduce((sum, a) => sum + (Number(a.cost) || 0), 0);
 
   // State: Add / Edit
@@ -279,7 +283,7 @@ export default function DepartmentTree() {
                             </td>
                             <td>
                               <div style={{ fontWeight: 600, color: '#0f172a' }}>{asset.name}</div>
-                              <div style={{ fontSize: '0.725rem', color: '#64748b' }}>{asset.brand} - {asset.model}</div>
+                              <div style={{ fontSize: '0.725rem', color: '#64748b' }}>{asset.brand ? `${asset.brand} • ` : ''}{asset.type}</div>
                             </td>
                             <td style={{ fontSize: '0.8rem', color: '#475569' }}>{asset.locationPath}</td>
                             <td><div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{asset.currentUser}</div></td>

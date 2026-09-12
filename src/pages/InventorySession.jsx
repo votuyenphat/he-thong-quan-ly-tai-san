@@ -273,7 +273,7 @@ export default function InventorySession() {
                     </td>
                     <td>
                       <div style={{ fontWeight: 600 }}>{asset.name}</div>
-                      <div style={{ fontSize: '0.725rem', color: '#64748b' }}>{asset.brand} - {asset.model}</div>
+                      <div style={{ fontSize: '0.725rem', color: '#64748b' }}>{asset.brand ? `${asset.brand} • ` : ''}{asset.type}</div>
                     </td>
                     <td>
                       <div style={{ fontSize: '0.8rem', color: '#475569' }}>{asset.locationPath}</div>
