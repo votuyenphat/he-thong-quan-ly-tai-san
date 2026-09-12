@@ -141,3 +141,45 @@ export function sanitizeAssetList(assets) {
   if (!Array.isArray(assets)) return [];
   return assets.map(sanitizeAsset);
 }
+
+/**
+ * Hợp nhất và loại bỏ vị trí trùng lặp trong cây vị trí địa lý đa cấp:
+ * - Chuẩn hóa tên (Unicode NFC, loại bỏ khoảng trắng ẩn/thừa)
+ * - Gộp các node cùng tên ở cùng một cấp
+ * - Hợp nhất danh sách children của các node trùng lặp một cách đệ quy
+ */
+export function deduplicateAndMergeLocationTree(nodes) {
+  if (!Array.isArray(nodes)) return [];
+  const map = new Map();
+
+  nodes.forEach(rawNode => {
+    if (!rawNode || !rawNode.name) return;
+    const normName = cleanText(rawNode.name);
+    if (!normName) return;
+    const key = normName.toLowerCase();
+
+    if (!map.has(key)) {
+      map.set(key, {
+        ...rawNode,
+        name: normName,
+        code: cleanText(rawNode.code),
+        children: Array.isArray(rawNode.children) ? [...rawNode.children] : []
+      });
+    } else {
+      const existing = map.get(key);
+      if (!existing.code && rawNode.code) existing.code = cleanText(rawNode.code);
+      if (Array.isArray(rawNode.children) && rawNode.children.length > 0) {
+        existing.children = [...existing.children, ...rawNode.children];
+      }
+    }
+  });
+
+  const merged = Array.from(map.values());
+  merged.forEach(node => {
+    if (node.children && node.children.length > 0) {
+      node.children = deduplicateAndMergeLocationTree(node.children);
+    }
+  });
+  return merged;
+}
+

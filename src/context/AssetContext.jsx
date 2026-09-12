@@ -16,7 +16,8 @@ import {
   canonicalStatus,
   canonicalCondition,
   sanitizeAsset,
-  sanitizeAssetList
+  sanitizeAssetList,
+  deduplicateAndMergeLocationTree
 } from '../utils/normalize';
 
 const AssetContext = createContext();
@@ -53,7 +54,8 @@ export function AssetProvider({ children }) {
 
   const [locations, setLocations] = useState(() => {
     const s = localStorage.getItem('qlts_locations');
-    return s ? JSON.parse(s) : INITIAL_LOCATIONS;
+    const parsed = s ? JSON.parse(s) : INITIAL_LOCATIONS;
+    return deduplicateAndMergeLocationTree(parsed);
   });
 
   const [transfers, setTransfers] = useState(() => {
@@ -131,13 +133,22 @@ export function AssetProvider({ children }) {
       setAssets(healed);
       localStorage.setItem('qlts_assets', JSON.stringify(healed));
     }
+
+    // Auto-heal duplicate locations in localStorage
+    if (Array.isArray(locations) && locations.length > 0) {
+      const deduplicated = deduplicateAndMergeLocationTree(locations);
+      if (JSON.stringify(deduplicated) !== JSON.stringify(locations)) {
+        setLocations(deduplicated);
+        localStorage.setItem('qlts_locations', JSON.stringify(deduplicated));
+      }
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Sync back to localStorage
   useEffect(() => { localStorage.setItem('qlts_assets', JSON.stringify(assets)); }, [assets]);
   useEffect(() => { localStorage.setItem('qlts_departments', JSON.stringify(departments)); }, [departments]);
-  useEffect(() => { localStorage.setItem('qlts_locations', JSON.stringify(locations)); }, [locations]);
+  useEffect(() => { localStorage.setItem('qlts_locations', JSON.stringify(deduplicateAndMergeLocationTree(locations))); }, [locations]);
   useEffect(() => { localStorage.setItem('qlts_transfers', JSON.stringify(transfers)); }, [transfers]);
   useEffect(() => { localStorage.setItem('qlts_recalls', JSON.stringify(recalls)); }, [recalls]);
   useEffect(() => { localStorage.setItem('qlts_liquidations', JSON.stringify(liquidations)); }, [liquidations]);
@@ -736,46 +747,50 @@ export function AssetProvider({ children }) {
       { type: 'ROOM', label: 'Phòng' }
     ];
 
-    const rootNodes = JSON.parse(JSON.stringify(locations || []));
+    const rootNodes = deduplicateAndMergeLocationTree(locations || []);
 
     list.forEach(asset => {
       if (!asset.locationPath || !asset.locationPath.trim()) return;
 
-      const parts = asset.locationPath
-        .split(/\s*[>/]\s*/)
-        .map(p => p.trim())
-        .filter(Boolean);
-
+      const rawPath = cleanText(asset.locationPath);
+      let parts = rawPath.split(/\s*>\s*/).map(p => cleanText(p)).filter(Boolean);
+      if (parts.length === 0) {
+        parts = rawPath.split(/\s*;\s*/).map(p => cleanText(p)).filter(Boolean);
+      }
       if (parts.length === 0) return;
 
       let currentLevelNodes = rootNodes;
       let currentPath = '';
 
       parts.forEach((partName, idx) => {
-        currentPath = currentPath ? `${currentPath} > ${partName}` : partName;
-        let node = currentLevelNodes.find(n => n.name.toLowerCase() === partName.toLowerCase());
+        const cleanPart = cleanText(partName);
+        if (!cleanPart) return;
+        currentPath = currentPath ? `${currentPath} > ${cleanPart}` : cleanPart;
+        const key = cleanPart.toLowerCase();
+        let node = currentLevelNodes.find(n => cleanText(n.name).toLowerCase() === key);
 
         if (!node) {
           const depth = Math.min(idx, 3);
           node = {
-            id: `loc-auto-${encodeURIComponent(currentPath).replace(/%/g, '').slice(0, 35)}-${idx}`,
-            name: partName,
-            code: partName.slice(0, 10).toUpperCase(),
+            id: `loc-auto-${encodeURIComponent(cleanText(currentPath)).replace(/%/g, '').slice(0, 35)}-${idx}`,
+            name: cleanPart,
+            code: cleanPart.slice(0, 10).toUpperCase(),
             type: LEVEL_TYPES[depth]?.type || 'ROOM',
             children: []
           };
           currentLevelNodes.push(node);
         } else {
-          if (!node.children) node.children = [];
+          if (!Array.isArray(node.children)) node.children = [];
         }
 
         currentLevelNodes = node.children;
       });
     });
 
-    setLocations(rootNodes);
+    const finalTree = deduplicateAndMergeLocationTree(rootNodes);
+    setLocations(finalTree);
     addAuditLog('Đồng bộ vị trí', 'Cây địa lý', `Đồng bộ cây vị trí địa lý từ danh mục ${list.length} tài sản`);
-    return rootNodes;
+    return finalTree;
   };
 
   const deleteLocation = (id) => {
