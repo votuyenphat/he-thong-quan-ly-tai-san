@@ -895,14 +895,13 @@ export default function AssetInbound({ setActiveTab }) {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Đơn giá mua vào (VNĐ) (*)</label>
+                <label className="form-label">Đơn giá mua vào (VNĐ)</label>
                 <input
                   type="number"
                   className="form-input"
-                  placeholder="VD: 25000000"
+                  placeholder="VD: 25000000 (tùy chọn)"
                   value={formData.cost}
                   onChange={(e) => setFormData({ ...formData, cost: e.target.value })}
-                  required
                 />
               </div>
 
@@ -924,16 +923,15 @@ export default function AssetInbound({ setActiveTab }) {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Năm nhập kho (*)</label>
+                <label className="form-label">Năm nhập kho</label>
                 <input
                   type="number"
                   className="form-input"
                   min="1990"
                   max="2100"
-                  placeholder="VD: 2026"
+                  placeholder="VD: 2026 (tùy chọn)"
                   value={formData.importYear}
                   onChange={(e) => setFormData({ ...formData, importYear: e.target.value })}
-                  required
                 />
               </div>
 
@@ -973,6 +971,7 @@ export default function AssetInbound({ setActiveTab }) {
                   value={formData.fundingSource}
                   onChange={(e) => setFormData({ ...formData, fundingSource: e.target.value })}
                 >
+                  <option value="">-- Tùy chọn --</option>
                   <option value="Ngân sách Nhà nước cấp">Ngân sách Nhà nước cấp</option>
                   <option value="Nguồn thu sự nghiệp">Nguồn thu sự nghiệp</option>
                   <option value="Tài trợ / Viện trợ dự án">Tài trợ / Viện trợ dự án</option>
