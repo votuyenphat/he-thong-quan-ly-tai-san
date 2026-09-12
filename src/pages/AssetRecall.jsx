@@ -1,66 +1,82 @@
 // src/pages/AssetRecall.jsx
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAssets } from '../context/AssetContext';
 import { useAuth } from '../context/AuthContext';
 import { generateRecallCode, formatDate } from '../utils/formatters';
 import { printElement } from '../utils/printHelpers';
+import { cleanText, canonicalStatus } from '../utils/normalize';
 import Modal from '../components/common/Modal';
 import {
   RotateCcw,
   Plus,
-  Package,
-  CheckCircle,
   Printer,
-  ShieldAlert,
-  Layers
+  Search,
+  X,
+  Trash2,
+  CheckCircle,
+  Package,
+  MapPin,
+  Building,
+  User
 } from 'lucide-react';
-import { canonicalStatus } from '../utils/normalize';
 
 export default function AssetRecall() {
-  const { assets, recalls, createRecall } = useAssets();
-  const { currentUser } = useAuth();
+  const { assets, recalls, createRecall, deleteRecall } = useAssets();
+  const { currentUser, permissions } = useAuth();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedPrintRecall, setSelectedPrintRecall] = useState(null);
 
-  // Available assets currently in use
-  const inUseAssets = assets.filter(a => canonicalStatus(a.status) === 'Đang sử dụng');
+  // Search & smart suggestions state
+  const [selectedAssetId, setSelectedAssetId] = useState('');
+  const [assetSearchTerm, setAssetSearchTerm] = useState('');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
 
-  const [selectedAssetId, setSelectedAssetId] = useState(inUseAssets[0]?.id || '');
+  // Form inputs
   const [reason, setReason] = useState('Thu hồi nhập kho sau khi kết thúc dự án / luân chuyển');
   const [condition, setCondition] = useState('Tốt');
-  const [accessories, setAccessories] = useState(['Cáp nguồn / Dây sạc', 'Chuột máy tính', 'Túi đựng bảo vệ']);
-  const [newAccessory, setNewAccessory] = useState('');
 
   const targetAsset = assets.find(a => a.id === selectedAssetId);
 
+  // Danh sách tài sản có thể thu hồi (đang sử dụng hoặc đang điều chuyển, không tính đã thanh lý hoặc đã trong kho)
+  const recallableAssets = useMemo(() => {
+    return assets.filter(a => {
+      const st = canonicalStatus(a.status);
+      return st !== 'Đã thanh lý' && st !== 'Trong kho' && st !== 'Đã thu hồi';
+    });
+  }, [assets]);
+
+  // Gợi ý thông minh tìm kiếm tài sản thu hồi
+  const filteredAssetSuggestions = useMemo(() => {
+    if (!assetSearchTerm.trim()) {
+      return recallableAssets.slice(0, 8);
+    }
+    const q = cleanText(assetSearchTerm).toLowerCase();
+    return recallableAssets.filter(a =>
+      cleanText(a.code).toLowerCase().includes(q) ||
+      cleanText(a.name).toLowerCase().includes(q) ||
+      cleanText(a.departmentName).toLowerCase().includes(q) ||
+      cleanText(a.currentUser).toLowerCase().includes(q) ||
+      cleanText(a.locationPath).toLowerCase().includes(q) ||
+      cleanText(a.brand).toLowerCase().includes(q)
+    ).slice(0, 10);
+  }, [recallableAssets, assetSearchTerm]);
+
   const handleOpenCreateModal = () => {
-    if (inUseAssets.length > 0) {
-      setSelectedAssetId(inUseAssets[0].id);
-    }
+    setSelectedAssetId('');
+    setAssetSearchTerm('');
+    setIsSearchFocused(false);
+    setReason('Thu hồi nhập kho sau khi kết thúc dự án / luân chuyển');
+    setCondition('Tốt');
     setIsModalOpen(true);
-  };
-
-  const handleToggleAccessory = (item) => {
-    if (accessories.includes(item)) {
-      setAccessories(accessories.filter(x => x !== item));
-    } else {
-      setAccessories([...accessories, item]);
-    }
-  };
-
-  const handleAddCustomAccessory = (e) => {
-    e.preventDefault();
-    if (!newAccessory.trim()) return;
-    if (!accessories.includes(newAccessory.trim())) {
-      setAccessories([...accessories, newAccessory.trim()]);
-    }
-    setNewAccessory('');
   };
 
   const handleCreateRecallSubmit = (e) => {
     e.preventDefault();
-    if (!targetAsset) return;
+    if (!targetAsset) {
+      alert('Vui lòng tìm kiếm và chọn 1 tài sản cần thu hồi!');
+      return;
+    }
 
     const code = generateRecallCode(recalls);
     const newRecall = {
@@ -70,16 +86,30 @@ export default function AssetRecall() {
       assetName: targetAsset.name,
       departmentId: targetAsset.departmentId,
       departmentName: targetAsset.departmentName,
-      sender: targetAsset.currentUser || targetAsset.responsiblePerson,
-      receiver: currentUser?.name || 'Vũ Tuyên Phát (Thủ kho)',
-      reason,
+      fromLocation: targetAsset.locationPath || 'Chưa phân vị trí',
+      fromDepartmentId: targetAsset.departmentId,
+      fromDepartmentName: targetAsset.departmentName,
+      fromUser: targetAsset.currentUser || targetAsset.responsiblePerson || '',
+      fromStatus: targetAsset.status || 'Đang sử dụng',
+      fromCondition: targetAsset.condition || 'Tốt',
+      sender: targetAsset.currentUser || targetAsset.responsiblePerson || 'Cán bộ bàn giao',
+      receiver: currentUser?.name || 'Thủ kho tiếp nhận',
+      reason: reason.trim() || 'Thu hồi nhập kho theo kế hoạch',
       condition,
-      accessories,
       date: new Date().toISOString().slice(0, 10)
     };
 
     createRecall(newRecall);
     setIsModalOpen(false);
+    setSelectedAssetId('');
+    setAssetSearchTerm('');
+  };
+
+  const handleDeleteRecall = (recall) => {
+    const msg = `Xác nhận xóa biên bản thu hồi "${recall.code}"?\n\n⚠️ LƯU Ý QUAN TRỌNG: Khi xóa biên bản này, tài sản "${recall.assetName}" (${recall.assetCode}) sẽ TỰ ĐỘNG QUAY VỀ VỊ TRÍ VÀ TRẠNG THÁI CŨ:\n• Vị trí cũ: [${recall.fromLocation || 'Vị trí ban đầu'}]\n• Đơn vị quản lý: [${recall.departmentName || 'Chưa rõ'}]\n• Người bàn giao/giữ: [${recall.sender || 'Chưa rõ'}]\n• Trạng thái: Đang sử dụng`;
+    if (window.confirm(msg)) {
+      deleteRecall(recall.id);
+    }
   };
 
   const handlePrintSlip = (recall) => {
@@ -98,7 +128,7 @@ export default function AssetRecall() {
             Thu Hồi Tài Sản Về Kho
           </h2>
           <p className="page-subtitle">
-            Lập biên bản bàn giao thu hồi tài sản, kiểm đếm phụ kiện kèm theo và tự động chuyển trạng thái vào kho
+            Lập biên bản bàn giao thu hồi tài sản nhập kho, tự động lưu vết vị trí cũ và hỗ trợ hoàn trả khi xóa biên bản
           </p>
         </div>
 
@@ -125,10 +155,10 @@ export default function AssetRecall() {
                 <th>Tài sản thu hồi</th>
                 <th>Đơn vị bàn giao</th>
                 <th>Người bàn giao</th>
-                <th>Phụ kiện kèm theo</th>
                 <th>Tình trạng thu hồi</th>
+                <th>Lý do / Mục đích</th>
                 <th>Ngày thu hồi</th>
-                <th style={{ textAlign: 'center', width: '130px' }}>In ấn</th>
+                <th style={{ textAlign: 'center', width: '170px' }}>Thao tác</th>
               </tr>
             </thead>
             <tbody>
@@ -154,6 +184,9 @@ export default function AssetRecall() {
                     </td>
                     <td>
                       <span style={{ fontSize: '0.85rem' }}>{r.departmentName}</span>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                        📍 Vị trí cũ: {r.fromLocation || 'Chưa lưu'}
+                      </div>
                     </td>
                     <td>
                       <span style={{ fontWeight: 600 }}>{r.sender}</span>
@@ -162,30 +195,38 @@ export default function AssetRecall() {
                       </div>
                     </td>
                     <td>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                        {(r.accessories || []).map((acc, idx) => (
-                          <span key={idx} className="badge badge-secondary" style={{ fontSize: '0.7rem' }}>
-                            ✓ {acc}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td>
                       <span className="badge badge-success">
                         {r.condition}
                       </span>
+                    </td>
+                    <td style={{ fontSize: '0.825rem', maxWidth: '220px' }}>
+                      <span title={r.reason}>{r.reason}</span>
                     </td>
                     <td style={{ fontSize: '0.825rem' }}>
                       {formatDate(r.date)}
                     </td>
                     <td style={{ textAlign: 'center' }}>
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => handlePrintSlip(r)}
-                        title="In biên bản thu hồi A4"
-                      >
-                        <Printer size={14} /> In biên bản
-                      </button>
+                      <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => handlePrintSlip(r)}
+                          title="In biên bản thu hồi A4"
+                        >
+                          <Printer size={14} /> In
+                        </button>
+                        <button
+                          className="btn btn-danger btn-sm"
+                          onClick={() => handleDeleteRecall(r)}
+                          title="Xóa biên bản thu hồi (hoàn trả tài sản về vị trí cũ)"
+                          style={{
+                            background: '#fee2e2',
+                            color: '#dc2626',
+                            borderColor: '#fecdd3'
+                          }}
+                        >
+                          <Trash2 size={13} /> Xóa
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -213,37 +254,194 @@ export default function AssetRecall() {
       >
         <form onSubmit={handleCreateRecallSubmit}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 16 }}>
-            <div className="form-group">
-              <label className="form-label">Chọn tài sản thu hồi (*)</label>
-              <select
-                className="form-select"
-                value={selectedAssetId}
-                onChange={(e) => setSelectedAssetId(e.target.value)}
-              >
-                {inUseAssets.map(a => (
-                  <option key={a.id} value={a.id}>
-                    [{a.code}] {a.name} - ({a.departmentName} - Đang dùng: {a.currentUser})
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* Tìm kiếm & Gợi ý thông minh tài sản */}
+            <div className="form-group" style={{ position: 'relative' }}>
+              <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Tìm kiếm & chọn tài sản cần thu hồi (*)</span>
+                {targetAsset && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedAssetId('');
+                      setAssetSearchTerm('');
+                    }}
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      color: '#2563eb',
+                      cursor: 'pointer',
+                      fontSize: '0.8rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      fontWeight: 500
+                    }}
+                  >
+                    <RotateCcw size={12} /> Đổi tài sản khác
+                  </button>
+                )}
+              </label>
 
-            {targetAsset && (
-              <div style={{
-                background: '#f8fafc',
-                padding: '12px 16px',
-                borderRadius: '8px',
-                border: '1px solid #e2e8f0',
-                fontSize: '0.85rem'
-              }}>
-                <div>Đơn vị hiện tại: <strong>{targetAsset.departmentName}</strong></div>
-                <div>Người bàn giao: <strong>{targetAsset.currentUser || targetAsset.responsiblePerson}</strong></div>
-                <div>Vị trí cũ: <strong>{targetAsset.locationPath}</strong></div>
-                <div style={{ color: '#059669', marginTop: 4, fontWeight: 600 }}>
-                  ➔ Sau khi xác nhận, tài sản sẽ tự động chuyển vị trí về: Kho Tổng CS1 (Tầng trệt) & Trạng thái: Trong kho
+              {!targetAsset ? (
+                <div style={{ position: 'relative' }}>
+                  <div style={{ position: 'relative' }}>
+                    <Search
+                      size={16}
+                      style={{
+                        position: 'absolute',
+                        left: 12,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        color: '#64748b'
+                      }}
+                    />
+                    <input
+                      type="text"
+                      className="form-input"
+                      style={{ paddingLeft: 36, paddingRight: assetSearchTerm ? 36 : 12 }}
+                      placeholder="Nhập mã tài sản, tên, phòng ban, người đang giữ để tìm nhanh..."
+                      value={assetSearchTerm}
+                      onChange={(e) => {
+                        setAssetSearchTerm(e.target.value);
+                        setIsSearchFocused(true);
+                      }}
+                      onFocus={() => setIsSearchFocused(true)}
+                    />
+                    {assetSearchTerm && (
+                      <button
+                        type="button"
+                        onClick={() => setAssetSearchTerm('')}
+                        style={{
+                          position: 'absolute',
+                          right: 10,
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          border: 'none',
+                          background: 'transparent',
+                          color: '#94a3b8',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <X size={15} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Dropdown Gợi ý thông minh */}
+                  {isSearchFocused && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        right: 0,
+                        zIndex: 50,
+                        marginTop: 4,
+                        background: '#ffffff',
+                        borderRadius: 8,
+                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+                        border: '1px solid #cbd5e1',
+                        maxHeight: 280,
+                        overflowY: 'auto'
+                      }}
+                    >
+                      <div style={{
+                        padding: '6px 12px',
+                        background: '#f1f5f9',
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        color: '#475569',
+                        borderBottom: '1px solid #e2e8f0',
+                        display: 'flex',
+                        justifyContent: 'space-between'
+                      }}>
+                        <span>GỢI Ý TÀI SẢN CÓ THỂ THU HỒI ({filteredAssetSuggestions.length})</span>
+                        <span style={{ cursor: 'pointer', color: '#64748b' }} onClick={() => setIsSearchFocused(false)}>Đóng</span>
+                      </div>
+                      {filteredAssetSuggestions.length === 0 ? (
+                        <div style={{ padding: '16px', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>
+                          Không tìm thấy tài sản nào phù hợp với từ khóa "{assetSearchTerm}"
+                        </div>
+                      ) : (
+                        filteredAssetSuggestions.map((a) => (
+                          <div
+                            key={a.id}
+                            onClick={() => {
+                              setSelectedAssetId(a.id);
+                              setAssetSearchTerm(`[${a.code}] ${a.name}`);
+                              setIsSearchFocused(false);
+                            }}
+                            style={{
+                              padding: '10px 14px',
+                              borderBottom: '1px solid #f1f5f9',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 2,
+                              transition: 'background 0.15s ease'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = '#ffffff'}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.875rem' }}>
+                                <span style={{ color: '#2563eb' }}>[{a.code}]</span> {a.name}
+                              </span>
+                              <span className="badge badge-info" style={{ fontSize: '0.7rem' }}>
+                                {a.departmentName || 'Chưa gán đơn vị'}
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', gap: 12, fontSize: '0.775rem', color: '#64748b' }}>
+                              <span>📍 Vị trí: <strong>{a.locationPath || 'Chưa xếp'}</strong></span>
+                              <span>👤 Người giữ: <strong>{a.currentUser || a.responsiblePerson || 'N/A'}</strong></span>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
+              ) : (
+                /* Card thông tin chi tiết tài sản đã chọn */
+                <div style={{
+                  background: '#f0fdf4',
+                  border: '1px solid #bbf7d0',
+                  borderRadius: '8px',
+                  padding: '12px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 6
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontWeight: 700, color: '#166534', fontSize: '0.95rem' }}>
+                      <span style={{ color: '#047857', background: '#d1fae5', padding: '2px 6px', borderRadius: 4, marginRight: 6 }}>
+                        {targetAsset.code}
+                      </span>
+                      {targetAsset.name}
+                    </div>
+                    <span className="badge badge-success" style={{ fontSize: '0.75rem' }}>Đã chọn</span>
+                  </div>
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                    gap: '6px 12px',
+                    fontSize: '0.825rem',
+                    color: '#374151',
+                    marginTop: 4,
+                    paddingTop: 6,
+                    borderTop: '1px dashed #86efac'
+                  }}>
+                    <div><strong>🏢 Đơn vị hiện tại:</strong> {targetAsset.departmentName}</div>
+                    <div><strong>📍 Vị trí hiện tại:</strong> {targetAsset.locationPath || 'Chưa cập nhật'}</div>
+                    <div><strong>👤 Người bàn giao:</strong> {targetAsset.currentUser || targetAsset.responsiblePerson || 'Chưa có'}</div>
+                    <div><strong>🏷️ Nhãn hiệu:</strong> {targetAsset.brand || 'N/A'}</div>
+                  </div>
+                  <div style={{ color: '#059669', fontSize: '0.8rem', marginTop: 4, fontWeight: 600 }}>
+                    ➔ Sau khi xác nhận, tài sản sẽ tự động chuyển vị trí về: Kho Tổng CS1 (Tầng trệt) & Trạng thái: Trong kho. Hệ thống tự động lưu vị trí cũ để hoàn trả khi xóa biên bản.
+                  </div>
+                </div>
+              )}
+            </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               <div className="form-group">
@@ -261,56 +459,15 @@ export default function AssetRecall() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Mục đích thu hồi (*)</label>
+                <label className="form-label">Mục đích / Lý do thu hồi (*)</label>
                 <input
                   type="text"
                   className="form-input"
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
+                  placeholder="VD: Thu hồi sau kết thúc đề tài, hoàn trả kho..."
                   required
                 />
-              </div>
-            </div>
-
-            {/* Phụ kiện bàn giao */}
-            <div className="form-group">
-              <label className="form-label">Kiểm tra phụ kiện đi kèm theo máy (*)</label>
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-                gap: 10,
-                background: '#f8fafc',
-                padding: '14px',
-                borderRadius: '8px',
-                border: '1px solid #e2e8f0'
-              }}>
-                {['Cáp nguồn / Dây sạc', 'Chuột máy tính', 'Túi đựng bảo vệ', 'Pin dự phòng', 'Sách hướng dẫn / Đĩa driver', 'Dây HDMI / DisplayPort'].map(item => (
-                  <label key={item} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={accessories.includes(item)}
-                      onChange={() => handleToggleAccessory(item)}
-                    />
-                    <span>{item}</span>
-                  </label>
-                ))}
-              </div>
-
-              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="Thêm phụ kiện khác (nếu có)..."
-                  value={newAccessory}
-                  onChange={(e) => setNewAccessory(e.target.value)}
-                />
-                <button 
-                  type="button" 
-                  className="btn btn-secondary btn-sm"
-                  onClick={handleAddCustomAccessory}
-                >
-                  + Thêm
-                </button>
               </div>
             </div>
           </div>
@@ -351,6 +508,10 @@ export default function AssetRecall() {
                   <td>{selectedPrintRecall.departmentName}</td>
                 </tr>
                 <tr>
+                  <td style={{ fontWeight: 'bold' }}>Vị trí ban đầu:</td>
+                  <td>{selectedPrintRecall.fromLocation || 'Chưa phân vị trí'}</td>
+                </tr>
+                <tr>
                   <td style={{ fontWeight: 'bold' }}>Người bàn giao:</td>
                   <td>{selectedPrintRecall.sender}</td>
                 </tr>
@@ -361,10 +522,6 @@ export default function AssetRecall() {
                 <tr>
                   <td style={{ fontWeight: 'bold' }}>Tình trạng khi thu hồi:</td>
                   <td>{selectedPrintRecall.condition}</td>
-                </tr>
-                <tr>
-                  <td style={{ fontWeight: 'bold' }}>Phụ kiện kèm theo:</td>
-                  <td>{(selectedPrintRecall.accessories || []).join(', ')}</td>
                 </tr>
                 <tr>
                   <td style={{ fontWeight: 'bold' }}>Lý do / Mục đích:</td>

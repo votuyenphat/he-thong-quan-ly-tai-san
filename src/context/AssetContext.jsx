@@ -459,12 +459,19 @@ export function AssetProvider({ children }) {
     );
   };
 
-  // Create Recall (Thu hồi) -> automatically shifts status to "Trong kho"
+  // Create Recall (Thu hồi) -> automatically shifts status to "Trong kho" & preserves previous state for potential rollback
   const createRecall = (recallData) => {
+    const targetAsset = assets.find(a => a.id === recallData.assetId || a.code === recallData.assetCode);
     const newId = `rc-${Date.now()}`;
     const newRecall = {
       id: newId,
       ...recallData,
+      fromLocation: targetAsset?.locationPath || recallData.fromLocation || 'Chưa phân vị trí',
+      fromDepartmentId: targetAsset?.departmentId || recallData.departmentId || '',
+      fromDepartmentName: targetAsset?.departmentName || recallData.departmentName || '',
+      fromUser: targetAsset?.currentUser || targetAsset?.responsiblePerson || recallData.sender || '',
+      fromStatus: targetAsset?.status || 'Đang sử dụng',
+      fromCondition: targetAsset?.condition || 'Tốt',
       status: 'Đã thu hồi',
       date: new Date().toISOString().slice(0, 10)
     };
@@ -479,7 +486,7 @@ export function AssetProvider({ children }) {
           date: new Date().toISOString().slice(0, 10),
           action: 'Thu hồi về kho',
           actor: currentUser ? currentUser.name : 'Thủ kho',
-          detail: `Thu hồi theo phiếu ${recallData.code}. Người giao: ${recallData.sender}. Phụ kiện bàn giao: ${(recallData.accessories || []).join(', ')}`
+          detail: `Thu hồi theo phiếu ${recallData.code}. Người giao: ${recallData.sender || a.currentUser}. Lý do: ${recallData.reason || 'Nhập kho'}`
         };
         return {
           ...a,
@@ -495,6 +502,43 @@ export function AssetProvider({ children }) {
 
     addAuditLog('Thu hồi tài sản', newRecall.code, `Thu hồi tài sản ${newRecall.assetName} về Kho Tổng`);
     return newRecall;
+  };
+
+  // Delete Recall -> Automatically reverts asset back to original location, department, user and status
+  const deleteRecall = (recallId) => {
+    const targetRecall = recalls.find(r => r.id === recallId);
+    if (!targetRecall) return;
+
+    const nowStr = new Date().toISOString().slice(0, 10);
+    setAssets(prev => prev.map(a => {
+      if (a.id === targetRecall.assetId || a.code === targetRecall.assetCode) {
+        const historyEntry = {
+          id: `h-${Date.now()}`,
+          date: nowStr,
+          action: 'Hủy phiếu thu hồi (Hoàn trả vị trí cũ)',
+          actor: currentUser ? currentUser.name : 'Quản trị viên',
+          detail: `Xóa phiếu thu hồi ${targetRecall.code}. Hoàn trả tài sản về vị trí ban đầu: [${targetRecall.fromLocation || 'Vị trí cũ'}]. Đơn vị: [${targetRecall.fromDepartmentName || a.departmentName}]. Người sử dụng: [${targetRecall.fromUser || targetRecall.sender || a.currentUser}]`
+        };
+        return {
+          ...a,
+          locationPath: targetRecall.fromLocation || a.locationPath,
+          departmentId: targetRecall.fromDepartmentId || a.departmentId,
+          departmentName: targetRecall.fromDepartmentName || a.departmentName,
+          currentUser: targetRecall.fromUser || targetRecall.sender || a.currentUser,
+          status: targetRecall.fromStatus || 'Đang sử dụng',
+          condition: targetRecall.fromCondition || a.condition,
+          history: [historyEntry, ...(a.history || [])]
+        };
+      }
+      return a;
+    }));
+
+    setRecalls(prev => prev.filter(r => r.id !== recallId));
+    addAuditLog(
+      'Xóa biên bản thu hồi',
+      targetRecall.code,
+      `Xóa biên bản ${targetRecall.code}, hoàn trả tài sản ${targetRecall.assetName} về vị trí cũ: [${targetRecall.fromLocation || 'Vị trí cũ'}]`
+    );
   };
 
   // Liquidation Process
@@ -888,6 +932,7 @@ export function AssetProvider({ children }) {
       approveTransfer,
       deleteTransfer,
       createRecall,
+      deleteRecall,
       proposeLiquidation,
       approveLiquidation,
       completeLiquidation,

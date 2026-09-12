@@ -6,6 +6,7 @@ import { generateTransferCode, formatDate } from '../utils/formatters';
 import { printElement } from '../utils/printHelpers';
 import { cleanText, canonicalStatus } from '../utils/normalize';
 import Modal from '../components/common/Modal';
+import LocationTreeSelector from '../components/common/LocationTreeSelector';
 import {
   ArrowLeftRight,
   Plus,
@@ -510,17 +511,13 @@ export default function AssetTransfer() {
               </div>
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Vị trí phòng ốc mới chi tiết (*)</label>
-              <input
-                type="text"
-                className="form-input"
-                placeholder="VD: Cơ sở 1 > Khu B > Tầng 2 > Giảng đường B2.01"
-                value={toLocation}
-                onChange={(e) => setToLocation(e.target.value)}
-                required
-              />
-            </div>
+            <LocationTreeSelector
+              value={toLocation}
+              onChange={setToLocation}
+              required
+              label="Vị trí phòng ốc mới chi tiết (*)"
+              placeholder="VD: Cơ sở 1 > Khu B > Tầng 2 > Giảng đường B2.01"
+            />
 
             <div className="form-group">
               <label className="form-label">Lý do điều chuyển (*)</label>
