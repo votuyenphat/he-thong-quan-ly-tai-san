@@ -1,5 +1,5 @@
 // src/context/AssetContext.jsx
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import {
   INITIAL_ASSETS,
   INITIAL_DEPARTMENTS,
@@ -19,6 +19,13 @@ import {
   sanitizeAssetList,
   deduplicateAndMergeLocationTree
 } from '../utils/normalize';
+import {
+  fetchServerVersion,
+  fetchServerData,
+  pushServerData,
+  exportBackupToFile,
+  readBackupFromFile
+} from '../services/syncService';
 
 const AssetContext = createContext();
 
@@ -157,6 +164,307 @@ export function AssetProvider({ children }) {
   useEffect(() => { localStorage.setItem('qlts_asset_types', JSON.stringify(assetTypeOptions)); }, [assetTypeOptions]);
   useEffect(() => { localStorage.setItem('qlts_conditions', JSON.stringify(conditionOptions)); }, [conditionOptions]);
   useEffect(() => { localStorage.setItem('qlts_statuses', JSON.stringify(statusOptions)); }, [statusOptions]);
+
+  // ========================================================
+  // HỆ THỐNG ĐỒNG BỘ DỮ LIỆU ĐA THIẾT BỊ (REAL-TIME SYNC)
+  // ========================================================
+  const [syncStatus, setSyncStatus] = useState('syncing'); // 'synced' | 'syncing' | 'offline' | 'error'
+  const [lastSyncTime, setLastSyncTime] = useState(null);
+  const [syncError, setSyncError] = useState(null);
+
+  const isIncomingSyncRef = useRef(false);
+  const isInitializedRef = useRef(false);
+
+  // Áp dụng dữ liệu từ máy chủ trung tâm vào React state
+  const applyServerData = useCallback((serverData) => {
+    isIncomingSyncRef.current = true;
+    if (Array.isArray(serverData.assets)) {
+      setAssets(sanitizeAssetList(serverData.assets));
+    }
+    if (Array.isArray(serverData.departments)) {
+      setDepartments(serverData.departments);
+    }
+    if (Array.isArray(serverData.locations)) {
+      setLocations(deduplicateAndMergeLocationTree(serverData.locations));
+    }
+    if (Array.isArray(serverData.transfers)) {
+      setTransfers(serverData.transfers);
+    }
+    if (Array.isArray(serverData.recalls)) {
+      setRecalls(serverData.recalls);
+    }
+    if (Array.isArray(serverData.liquidations)) {
+      setLiquidations(serverData.liquidations);
+    }
+    if (Array.isArray(serverData.inventorySessions)) {
+      setInventorySessions(serverData.inventorySessions);
+    }
+    if (Array.isArray(serverData.auditLogs)) {
+      setAuditLogs(serverData.auditLogs);
+    }
+    if (Array.isArray(serverData.assetTypeOptions) && serverData.assetTypeOptions.length > 0) {
+      setAssetTypeOptions(Array.from(new Set(serverData.assetTypeOptions.map(cleanText).filter(Boolean))));
+    }
+    if (Array.isArray(serverData.conditionOptions) && serverData.conditionOptions.length > 0) {
+      setConditionOptions(Array.from(new Set(serverData.conditionOptions.map(canonicalCondition).filter(Boolean))));
+    }
+    if (Array.isArray(serverData.statusOptions) && serverData.statusOptions.length > 0) {
+      setStatusOptions(Array.from(new Set(serverData.statusOptions.map(canonicalStatus).filter(Boolean))));
+    }
+    const t = serverData.lastUpdated || Date.now();
+    setLastSyncTime(t);
+    setSyncStatus('synced');
+    setSyncError(null);
+  }, []);
+
+  // 1. Khởi tạo ban đầu: Kết nối máy chủ và đồng bộ dữ liệu 2 chiều
+  useEffect(() => {
+    let mounted = true;
+
+    async function initSync() {
+      setSyncStatus('syncing');
+      try {
+        const serverData = await fetchServerData();
+        if (!mounted) return;
+
+        const serverHasData = (serverData.assets && serverData.assets.length > 0) ||
+                              (serverData.departments && serverData.departments.length > 0) ||
+                              (serverData.lastUpdated && serverData.lastUpdated > 0);
+
+        // Kiểm tra xem trình duyệt hiện tại đã có dữ liệu trong localStorage chưa
+        const localSavedAssets = localStorage.getItem('qlts_assets');
+        const localAssetsCount = localSavedAssets ? JSON.parse(localSavedAssets).length : 0;
+        const localSavedDepts = localStorage.getItem('qlts_departments');
+        const localDeptsCount = localSavedDepts ? JSON.parse(localSavedDepts).length : 0;
+
+        if (serverHasData) {
+          // Máy chủ đã có dữ liệu -> nạp dữ liệu máy chủ vào thiết bị này
+          applyServerData(serverData);
+        } else if (localAssetsCount > 0 || localDeptsCount > 0) {
+          // Máy chủ trống nhưng máy này đã có dữ liệu sẵn -> tự động đẩy lên máy chủ làm dữ liệu gốc
+          const payload = {
+            assets,
+            departments,
+            locations,
+            transfers,
+            recalls,
+            liquidations,
+            inventorySessions,
+            auditLogs,
+            assetTypeOptions,
+            conditionOptions,
+            statusOptions,
+            lastUpdated: Date.now()
+          };
+          await pushServerData(payload);
+          setLastSyncTime(payload.lastUpdated);
+          setSyncStatus('synced');
+        } else {
+          setSyncStatus('synced');
+          setLastSyncTime(Date.now());
+        }
+      } catch (err) {
+        console.warn('[Sync] Máy chủ ngoại tuyến hoặc chưa kết nối:', err.message);
+        if (mounted) {
+          setSyncStatus('offline');
+          setSyncError(err.message);
+        }
+      } finally {
+        if (mounted) {
+          isInitializedRef.current = true;
+        }
+      }
+    }
+
+    initSync();
+
+    return () => {
+      mounted = false;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applyServerData]);
+
+  // 2. Tự động đẩy thay đổi lên máy chủ khi người dùng thao tác trên thiết bị này (Debounce 500ms)
+  useEffect(() => {
+    if (!isInitializedRef.current) return;
+    if (isIncomingSyncRef.current) {
+      isIncomingSyncRef.current = false;
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        setSyncStatus('syncing');
+        const payload = {
+          assets,
+          departments,
+          locations,
+          transfers,
+          recalls,
+          liquidations,
+          inventorySessions,
+          auditLogs,
+          assetTypeOptions,
+          conditionOptions,
+          statusOptions,
+          lastUpdated: Date.now()
+        };
+        const res = await pushServerData(payload);
+        if (res && res.status === 'ok') {
+          setLastSyncTime(res.lastUpdated || payload.lastUpdated);
+          setSyncStatus('synced');
+          setSyncError(null);
+        }
+      } catch (err) {
+        setSyncStatus('offline');
+        setSyncError(err.message);
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [
+    assets,
+    departments,
+    locations,
+    transfers,
+    recalls,
+    liquidations,
+    inventorySessions,
+    auditLogs,
+    assetTypeOptions,
+    conditionOptions,
+    statusOptions
+  ]);
+
+  // 3. Định kỳ thăm dò máy chủ để cập nhật dữ liệu từ thiết bị khác (Polling mỗi 2.5s)
+  useEffect(() => {
+    let active = true;
+
+    async function checkServerUpdates() {
+      if (!isInitializedRef.current) return;
+      try {
+        const ver = await fetchServerVersion();
+        if (!active) return;
+
+        // Nếu máy chủ có cập nhật mới hơn lần đồng bộ cuối
+        if (ver && ver.lastUpdated && lastSyncTime && ver.lastUpdated > lastSyncTime) {
+          setSyncStatus('syncing');
+          const fullData = await fetchServerData();
+          if (active && fullData) {
+            applyServerData(fullData);
+          }
+        } else if (syncStatus === 'offline') {
+          setSyncStatus('synced');
+          setSyncError(null);
+        }
+      } catch (err) {
+        if (active && syncStatus !== 'offline') {
+          setSyncStatus('offline');
+        }
+      }
+    }
+
+    const intervalId = setInterval(checkServerUpdates, 2500);
+
+    // Đồng bộ ngay khi người dùng quay lại tab hoặc mở màn hình điện thoại
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkServerUpdates();
+      }
+    };
+    const handleFocus = () => {
+      checkServerUpdates();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      active = false;
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [lastSyncTime, applyServerData, syncStatus]);
+
+  // Cưỡng bức làm mới dữ liệu từ máy chủ
+  const syncNow = async () => {
+    setSyncStatus('syncing');
+    try {
+      const data = await fetchServerData();
+      applyServerData(data);
+      return { success: true };
+    } catch (err) {
+      setSyncStatus('offline');
+      setSyncError(err.message);
+      return { success: false, error: err.message };
+    }
+  };
+
+  // Cưỡng chế đẩy toàn bộ dữ liệu máy này lên máy chủ
+  const forcePushToServer = async () => {
+    setSyncStatus('syncing');
+    try {
+      const payload = {
+        assets,
+        departments,
+        locations,
+        transfers,
+        recalls,
+        liquidations,
+        inventorySessions,
+        auditLogs,
+        assetTypeOptions,
+        conditionOptions,
+        statusOptions,
+        lastUpdated: Date.now()
+      };
+      const res = await pushServerData(payload);
+      setLastSyncTime(res.lastUpdated || payload.lastUpdated);
+      setSyncStatus('synced');
+      setSyncError(null);
+      return { success: true };
+    } catch (err) {
+      setSyncStatus('offline');
+      setSyncError(err.message);
+      return { success: false, error: err.message };
+    }
+  };
+
+  // Xuất file backup JSON
+  const exportBackup = () => {
+    const payload = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      assets,
+      departments,
+      locations,
+      transfers,
+      recalls,
+      liquidations,
+      inventorySessions,
+      auditLogs,
+      assetTypeOptions,
+      conditionOptions,
+      statusOptions,
+      lastUpdated: Date.now()
+    };
+    exportBackupToFile(payload);
+  };
+
+  // Nhập file backup JSON
+  const importBackup = async (file) => {
+    try {
+      const data = await readBackupFromFile(file);
+      applyServerData(data);
+      await forcePushToServer();
+      addAuditLog('Khôi phục dữ liệu', file.name, 'Nhập dữ liệu thành công từ tệp sao lưu JSON');
+      return { success: true, count: (data.assets || []).length };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  };
+
 
 
   // Helper functions to manage dynamic options
@@ -954,7 +1262,15 @@ export function AssetProvider({ children }) {
       deleteLocation,
       addDepartment,
       updateDepartment,
-      deleteDepartment
+      deleteDepartment,
+      // Multi-device sync
+      syncStatus,
+      lastSyncTime,
+      syncError,
+      syncNow,
+      forcePushToServer,
+      exportBackup,
+      importBackup
     }}>
       {children}
     </AssetContext.Provider>

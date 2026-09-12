@@ -785,5 +785,27 @@ body {
     grid-template-columns: repeat(2, 1fr) !important;
     gap: 10px !important;
   }
+
+  /* Ẩn text chỉ giữ icon trên màn hình hẹp */
+  @media (max-width: 480px) {
+    .sync-badge-text {
+      display: none;
+    }
+  }
 }
+
+/* Spinning animation for sync icon */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
 

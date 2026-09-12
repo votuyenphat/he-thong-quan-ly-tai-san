@@ -13,6 +13,7 @@ import {
   Clock,
   Menu
 } from 'lucide-react';
+import SyncStatusBadge from '../common/SyncStatusBadge';
 
 export default function Navbar({ setActiveTab, onOpenMobileMenu }) {
   const { currentUser, switchRole, logout } = useAuth();
@@ -80,6 +81,9 @@ export default function Navbar({ setActiveTab, onOpenMobileMenu }) {
 
       {/* Action Center: Role Switcher, Alerts, User Info */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+        {/* Real-time Multi-Device Sync Indicator */}
+        <SyncStatusBadge />
+
         {/* Quick Role Switcher (4 Roles) */}
         <div style={{ position: 'relative' }}>
           <button 
