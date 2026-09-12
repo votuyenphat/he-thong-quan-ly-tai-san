@@ -23,7 +23,7 @@ const EMPTY_DEPT = {
 };
 
 export default function DepartmentTree() {
-  const { departments, assets, addDepartment, updateDepartment, deleteDepartment } = useAssets();
+  const { departments, assets, addDepartment, updateDepartment, deleteDepartment, deleteAssetsBatch } = useAssets();
   const { permissions } = useAuth();
 
   const [selectedDeptId, setSelectedDeptId] = useState(departments[0]?.id || '');
@@ -39,6 +39,14 @@ export default function DepartmentTree() {
   const [editDept, setEditDept] = useState(null); // dept object to edit
   const [formData, setFormData] = useState({ ...EMPTY_DEPT });
   const [deleteConfirm, setDeleteConfirm] = useState(null); // dept id
+  const [isDeleteDeptAssetsOpen, setIsDeleteDeptAssetsOpen] = useState(false);
+
+  const handleDeleteDeptAssetsConfirm = () => {
+    if (!activeDept || deptAssets.length === 0) return;
+    const assetIds = deptAssets.map(a => a.id);
+    deleteAssetsBatch(assetIds, `Xóa toàn bộ ${assetIds.length} tài sản của phòng/ban: ${activeDept.name} (${activeDept.code})`);
+    setIsDeleteDeptAssetsOpen(false);
+  };
 
   const handleOpenAdd = () => {
     setFormData({ ...EMPTY_DEPT });
@@ -250,9 +258,44 @@ export default function DepartmentTree() {
 
               {/* Assets Table */}
               <div className="card">
-                <h4 className="card-title">
-                  <span>Danh Sách Tài Sản Trực Thuộc ({deptAssets.length} tài sản)</span>
-                </h4>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
+                  <h4 className="card-title" style={{ margin: 0 }}>
+                    <span>Danh Sách Tài Sản Trực Thuộc ({deptAssets.length} tài sản)</span>
+                  </h4>
+                  {permissions?.canManageAssets && deptAssets.length > 0 && (
+                    <button
+                      type="button"
+                      className="btn"
+                      style={{
+                        background: '#fef2f2',
+                        color: '#dc2626',
+                        border: '1px solid #fecaca',
+                        fontSize: '0.8rem',
+                        fontWeight: 600,
+                        padding: '6px 14px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        cursor: 'pointer',
+                        borderRadius: 6,
+                        transition: 'all 0.15s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = '#fee2e2';
+                        e.currentTarget.style.borderColor = '#f87171';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = '#fef2f2';
+                        e.currentTarget.style.borderColor = '#fecaca';
+                      }}
+                      onClick={() => setIsDeleteDeptAssetsOpen(true)}
+                      title={`Xóa toàn bộ ${deptAssets.length} tài sản đang phân bổ cho phòng ${activeDept.name}`}
+                    >
+                      <Trash2 size={15} />
+                      Xóa toàn bộ tài sản phòng này ({deptAssets.length})
+                    </button>
+                  )}
+                </div>
                 <div className="table-container">
                   <table className="table">
                     <thead>
@@ -368,7 +411,7 @@ export default function DepartmentTree() {
         </div>
       )}
 
-      {/* Delete Confirmation */}
+      {/* Delete Confirmation for Department */}
       {deleteConfirm && (
         <div style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
@@ -393,6 +436,83 @@ export default function DepartmentTree() {
               <button className="btn btn-secondary" onClick={() => setDeleteConfirm(null)}>Hủy</button>
               <button className="btn" style={{ background: '#dc2626', color: '#fff' }} onClick={handleDeleteConfirm}>
                 <Trash2 size={14} /> Xóa
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete All Assets of Department Modal */}
+      {isDeleteDeptAssetsOpen && activeDept && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999
+        }}>
+          <div style={{
+            background: '#fff', borderRadius: '16px', padding: '24px 28px', maxWidth: '520px', width: '92%',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.25)', maxHeight: '90vh', display: 'flex', flexDirection: 'column'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 16 }}>
+              <div style={{
+                width: 44, height: 44, borderRadius: '50%', background: '#fef2f2',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+              }}>
+                <AlertTriangle size={24} color="#dc2626" />
+              </div>
+              <div>
+                <h3 style={{ fontWeight: 800, fontSize: '1.05rem', margin: 0, color: '#991b1b' }}>
+                  Xóa toàn bộ tài sản: {activeDept.name}?
+                </h3>
+                <p style={{ color: '#475569', fontSize: '0.85rem', margin: '6px 0 0', lineHeight: 1.5 }}>
+                  Bạn có chắc chắn muốn xóa vĩnh viễn tất cả <strong>{deptAssets.length}</strong> tài sản thuộc phòng ban <strong>{activeDept.name}</strong>?
+                </p>
+                <div style={{
+                  background: '#fef2f2',
+                  border: '1px solid #fecaca',
+                  borderRadius: 8,
+                  padding: '10px 12px',
+                  marginTop: 10,
+                  fontSize: '0.8rem',
+                  color: '#b91c1c'
+                }}>
+                  ⚠️ <strong>Cảnh báo:</strong> Tổng giá trị tài sản sẽ bị xóa là <strong>{formatVND(deptTotalValue)}</strong>. Thao tác này sẽ xóa hoàn toàn các tài sản này khỏi hệ thống!
+                </div>
+              </div>
+            </div>
+
+            {/* Danh sách rút gọn tài sản sắp bị xóa */}
+            <div style={{
+              border: '1px solid #e2e8f0',
+              borderRadius: 8,
+              padding: '10px 12px',
+              maxHeight: 180,
+              overflowY: 'auto',
+              background: '#f8fafc',
+              fontSize: '0.8rem',
+              marginBottom: 18
+            }}>
+              <div style={{ fontWeight: 700, color: '#475569', marginBottom: 6, fontSize: '0.75rem' }}>
+                DANH SÁCH TÀI SẢN SẼ BỊ XÓA ({deptAssets.length}):
+              </div>
+              {deptAssets.map((a, idx) => (
+                <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: idx < deptAssets.length - 1 ? '1px solid #e2e8f0' : 'none' }}>
+                  <span><strong style={{ color: '#1e3a8a' }}>[{a.code}]</strong> {a.name}</span>
+                  <span style={{ color: '#059669', fontWeight: 600 }}>{formatVND(a.cost)}</span>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button className="btn btn-secondary" onClick={() => setIsDeleteDeptAssetsOpen(false)}>
+                Hủy bỏ
+              </button>
+              <button
+                className="btn"
+                style={{ background: '#dc2626', color: '#fff', display: 'flex', alignItems: 'center', gap: 6 }}
+                onClick={handleDeleteDeptAssetsConfirm}
+              >
+                <Trash2 size={16} />
+                Xác nhận xóa {deptAssets.length} tài sản
               </button>
             </div>
           </div>

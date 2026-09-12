@@ -329,6 +329,14 @@ export function AssetProvider({ children }) {
     addAuditLog('Xóa tài sản', `${asset.name} (${asset.code})`, `Người thực hiện: ${currentUser?.name}`);
   };
 
+  // Delete Batch of Assets (Xóa hàng loạt tài sản)
+  const deleteAssetsBatch = (assetIds, logReason = '') => {
+    if (!assetIds || assetIds.length === 0) return;
+    const idSet = new Set(assetIds);
+    setAssets(prev => prev.filter(a => !idSet.has(a.id)));
+    addAuditLog('Xóa hàng loạt tài sản', `${assetIds.length} tài sản`, logReason || `Người thực hiện: ${currentUser?.name || 'Người dùng'}`);
+  };
+
   // Add Document to Asset
   const addAssetDocument = (assetId, doc) => {
     setAssets(prev => prev.map(a => {
@@ -927,6 +935,7 @@ export function AssetProvider({ children }) {
       importAssetsBatch,
       updateAsset,
       deleteAsset,
+      deleteAssetsBatch,
       addAssetDocument,
       createTransfer,
       approveTransfer,
