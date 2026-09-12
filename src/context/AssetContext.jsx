@@ -421,6 +421,44 @@ export function AssetProvider({ children }) {
     addAuditLog('Phê duyệt điều chuyển', targetTransfer.code, `Tự động cập nhật vị trí mới cho: ${targetTransfer.assetName}`);
   };
 
+  // Delete Transfer -> If approved, automatically reverts asset to its original location
+  const deleteTransfer = (transferId) => {
+    const targetTransfer = transfers.find(t => t.id === transferId);
+    if (!targetTransfer) return;
+
+    // If the transfer was approved, revert asset back to original location, department and user
+    if (targetTransfer.status === 'Đã duyệt') {
+      const nowStr = new Date().toISOString().slice(0, 10);
+      setAssets(prev => prev.map(a => {
+        if (a.id === targetTransfer.assetId || a.code === targetTransfer.assetCode) {
+          const historyEntry = {
+            id: `h-${Date.now()}`,
+            date: nowStr,
+            action: 'Hủy phiếu điều chuyển',
+            actor: currentUser ? currentUser.name : 'Quản trị viên',
+            detail: `Xóa phiếu ${targetTransfer.code}. Hoàn trả vị trí từ [${targetTransfer.toLocation}] về vị trí ban đầu: [${targetTransfer.fromLocation || 'Vị trí cũ'}]. Người quản lý: ${targetTransfer.sender || a.currentUser}`
+          };
+          return {
+            ...a,
+            departmentId: targetTransfer.fromDepartmentId || a.departmentId,
+            departmentName: targetTransfer.fromDepartmentName || a.departmentName,
+            locationPath: targetTransfer.fromLocation || a.locationPath,
+            currentUser: targetTransfer.sender || a.currentUser,
+            history: [historyEntry, ...(a.history || [])]
+          };
+        }
+        return a;
+      }));
+    }
+
+    setTransfers(prev => prev.filter(t => t.id !== transferId));
+    addAuditLog(
+      'Xóa phiếu điều chuyển',
+      targetTransfer.code,
+      `Xóa phiếu ${targetTransfer.code}${targetTransfer.status === 'Đã duyệt' ? ` (hoàn trả tài sản về [${targetTransfer.fromLocation}])` : ''}`
+    );
+  };
+
   // Create Recall (Thu hồi) -> automatically shifts status to "Trong kho"
   const createRecall = (recallData) => {
     const newId = `rc-${Date.now()}`;
@@ -848,6 +886,7 @@ export function AssetProvider({ children }) {
       addAssetDocument,
       createTransfer,
       approveTransfer,
+      deleteTransfer,
       createRecall,
       proposeLiquidation,
       approveLiquidation,

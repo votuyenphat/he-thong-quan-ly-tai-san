@@ -1,9 +1,10 @@
 // src/pages/AssetTransfer.jsx
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAssets } from '../context/AssetContext';
 import { useAuth } from '../context/AuthContext';
 import { generateTransferCode, formatDate } from '../utils/formatters';
 import { printElement } from '../utils/printHelpers';
+import { cleanText, canonicalStatus } from '../utils/normalize';
 import Modal from '../components/common/Modal';
 import {
   ArrowLeftRight,
@@ -16,37 +17,70 @@ import {
   Building,
   User,
   ShieldCheck,
-  XCircle
+  XCircle,
+  Search,
+  X,
+  Trash2,
+  RotateCcw
 } from 'lucide-react';
 
 export default function AssetTransfer() {
-  const { assets, departments, transfers, createTransfer, approveTransfer } = useAssets();
+  const { assets, departments, transfers, createTransfer, approveTransfer, deleteTransfer } = useAssets();
   const { permissions, currentUser } = useAuth();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedPrintTransfer, setSelectedPrintTransfer] = useState(null);
 
   // Transfer Form State
-  const [selectedAssetId, setSelectedAssetId] = useState(assets[0]?.id || '');
-  const [toDeptId, setToDeptId] = useState(departments[1]?.id || '');
-  const [toLocation, setToLocation] = useState('Cơ sở 1 > Khu A > Tầng 2 > Phòng A2.01');
+  const [selectedAssetId, setSelectedAssetId] = useState('');
+  const [assetSearchTerm, setAssetSearchTerm] = useState('');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [toDeptId, setToDeptId] = useState(departments[0]?.id || '');
+  const [toLocation, setToLocation] = useState(''); // Để trống không gợi ý theo yêu cầu
   const [receiver, setReceiver] = useState('');
   const [reason, setReason] = useState('');
 
   const targetAsset = assets.find(a => a.id === selectedAssetId);
   const targetToDept = departments.find(d => d.id === toDeptId);
 
-  const handleOpenCreateModal = () => {
-    if (assets.length > 0) {
-      setSelectedAssetId(assets[0].id);
-      setReceiver(departments[1]?.manager || '');
+  // Gợi ý thông minh danh sách tài sản (loại trừ tài sản đã thanh lý)
+  const filteredAssetSuggestions = useMemo(() => {
+    const available = assets.filter(a => canonicalStatus(a.status) !== 'Đã thanh lý');
+    if (!assetSearchTerm.trim()) {
+      return available.slice(0, 8);
     }
+    const q = cleanText(assetSearchTerm).toLowerCase();
+    return available.filter(a =>
+      cleanText(a.code).toLowerCase().includes(q) ||
+      cleanText(a.name).toLowerCase().includes(q) ||
+      cleanText(a.departmentName).toLowerCase().includes(q) ||
+      cleanText(a.currentUser).toLowerCase().includes(q) ||
+      cleanText(a.locationPath).toLowerCase().includes(q) ||
+      cleanText(a.brand).toLowerCase().includes(q)
+    ).slice(0, 10);
+  }, [assets, assetSearchTerm]);
+
+  const handleOpenCreateModal = () => {
+    setSelectedAssetId('');
+    setAssetSearchTerm('');
+    setIsSearchFocused(false);
+    setToDeptId(departments[0]?.id || '');
+    setToLocation(''); // Vị trí phòng ốc mới chi tiết để trống không gợi ý
+    setReceiver(departments[0]?.manager || '');
+    setReason('');
     setIsModalOpen(true);
   };
 
   const handleCreateTransferSubmit = (e) => {
     e.preventDefault();
-    if (!targetAsset) return;
+    if (!targetAsset) {
+      alert('Vui lòng tìm kiếm và chọn 1 tài sản cần điều chuyển!');
+      return;
+    }
+    if (!toLocation.trim()) {
+      alert('Vui lòng nhập vị trí phòng ốc mới chi tiết!');
+      return;
+    }
 
     const code = generateTransferCode(transfers);
     const newTransfer = {
@@ -56,23 +90,37 @@ export default function AssetTransfer() {
       assetName: targetAsset.name,
       fromDepartmentId: targetAsset.departmentId,
       fromDepartmentName: targetAsset.departmentName,
-      fromLocation: targetAsset.locationPath,
+      fromLocation: targetAsset.locationPath || 'Chưa phân vị trí',
       toDepartmentId: targetToDept?.id || '',
       toDepartmentName: targetToDept?.name || '',
-      toLocation,
+      toLocation: cleanText(toLocation),
       sender: targetAsset.currentUser || targetAsset.responsiblePerson || currentUser?.name,
-      receiver: receiver || 'Cán bộ tiếp nhận',
+      receiver: receiver.trim() || 'Cán bộ tiếp nhận',
       reason: reason.trim() || 'Điều chuyển vị trí công tác phục vụ đào tạo'
     };
 
     createTransfer(newTransfer);
     setIsModalOpen(false);
     setReason('');
+    setSelectedAssetId('');
+    setAssetSearchTerm('');
+    setToLocation('');
   };
 
   const handleApprove = (tId) => {
     if (window.confirm('Xác nhận phê duyệt phiếu điều chuyển này? Hệ thống sẽ tự động cập nhật vị trí mới cho tài sản.')) {
       approveTransfer(tId);
+    }
+  };
+
+  const handleDeleteTransfer = (transfer) => {
+    const isApproved = transfer.status === 'Đã duyệt';
+    const msg = isApproved
+      ? `Xác nhận xóa phiếu điều chuyển "${transfer.code}"?\n\n⚠️ LƯU Ý QUAN TRỌNG: Phiếu này đã được duyệt. Khi xóa, tài sản "${transfer.assetName}" (${transfer.assetCode}) sẽ TỰ ĐỘNG QUAY VỀ VỊ TRÍ BAN ĐẦU:\n• Vị trí cũ: [${transfer.fromLocation || 'Chưa rõ'}]\n• Đơn vị quản lý: [${transfer.fromDepartmentName || 'Chưa rõ'}]`
+      : `Xác nhận xóa phiếu điều chuyển "${transfer.code}"?`;
+
+    if (window.confirm(msg)) {
+      deleteTransfer(transfer.id);
     }
   };
 
@@ -117,12 +165,12 @@ export default function AssetTransfer() {
               <tr>
                 <th>Số phiếu</th>
                 <th>Tài sản điều chuyển</th>
-                <th>Từ địa điểm (Hiện tại)</th>
+                <th>Từ địa điểm (Ban đầu)</th>
                 <th>Đến địa điểm (Mới)</th>
                 <th>Người giao / Người nhận</th>
                 <th>Ngày lập</th>
                 <th style={{ textAlign: 'center' }}>Trạng thái</th>
-                <th style={{ textAlign: 'center', width: '150px' }}>Hành động</th>
+                <th style={{ textAlign: 'center', width: '190px' }}>Hành động</th>
               </tr>
             </thead>
             <tbody>
@@ -185,7 +233,7 @@ export default function AssetTransfer() {
                       )}
                     </td>
                     <td style={{ textAlign: 'center' }}>
-                      <div style={{ display: 'inline-flex', gap: 6 }}>
+                      <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
                         {t.status === 'Chờ duyệt' && permissions.canApproveTransfer && (
                           <button
                             className="btn btn-success btn-sm"
@@ -202,6 +250,20 @@ export default function AssetTransfer() {
                         >
                           <Printer size={14} /> In phiếu
                         </button>
+                        {permissions.canManageAssets && (
+                          <button
+                            className="btn btn-danger btn-sm"
+                            onClick={() => handleDeleteTransfer(t)}
+                            title="Xóa phiếu điều chuyển (hoàn trả tài sản về vị trí ban đầu)"
+                            style={{
+                              background: '#fee2e2',
+                              color: '#dc2626',
+                              borderColor: '#fecdd3'
+                            }}
+                          >
+                            <Trash2 size={13} /> Xóa
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -230,36 +292,191 @@ export default function AssetTransfer() {
       >
         <form onSubmit={handleCreateTransferSubmit}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 16 }}>
-            {/* Chọn tài sản */}
-            <div className="form-group">
-              <label className="form-label">Chọn tài sản cần điều chuyển (*)</label>
-              <select
-                className="form-select"
-                value={selectedAssetId}
-                onChange={(e) => setSelectedAssetId(e.target.value)}
-              >
-                {assets.filter(a => a.status !== 'Đã thanh lý').map(a => (
-                  <option key={a.id} value={a.id}>
-                    [{a.code}] {a.name} - ({a.departmentName} - {a.currentUser})
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* Tìm kiếm & Gợi ý thông minh tài sản */}
+            <div className="form-group" style={{ position: 'relative' }}>
+              <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Tìm kiếm & chọn tài sản cần điều chuyển (*)</span>
+                {targetAsset && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedAssetId('');
+                      setAssetSearchTerm('');
+                    }}
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      color: '#2563eb',
+                      cursor: 'pointer',
+                      fontSize: '0.8rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      fontWeight: 500
+                    }}
+                  >
+                    <RotateCcw size={12} /> Đổi tài sản khác
+                  </button>
+                )}
+              </label>
 
-            {targetAsset && (
-              <div style={{
-                background: '#f8fafc',
-                padding: '12px 16px',
-                borderRadius: '8px',
-                border: '1px solid #e2e8f0',
-                fontSize: '0.85rem'
-              }}>
-                <div style={{ fontWeight: 600, color: '#1e3a8a', marginBottom: 4 }}>VỊ TRÍ HIỆN TẠI:</div>
-                <div>Đơn vị: <strong>{targetAsset.departmentName}</strong></div>
-                <div>Vị trí: <strong>{targetAsset.locationPath}</strong></div>
-                <div>Người bàn giao: <strong>{targetAsset.currentUser || targetAsset.responsiblePerson}</strong></div>
-              </div>
-            )}
+              {!targetAsset ? (
+                <div style={{ position: 'relative' }}>
+                  <div style={{ position: 'relative' }}>
+                    <Search
+                      size={16}
+                      style={{
+                        position: 'absolute',
+                        left: 12,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        color: '#64748b'
+                      }}
+                    />
+                    <input
+                      type="text"
+                      className="form-input"
+                      style={{ paddingLeft: 36, paddingRight: assetSearchTerm ? 36 : 12 }}
+                      placeholder="Nhập mã tài sản, tên, đơn vị, người sử dụng để tìm kiếm nhanh..."
+                      value={assetSearchTerm}
+                      onChange={(e) => {
+                        setAssetSearchTerm(e.target.value);
+                        setIsSearchFocused(true);
+                      }}
+                      onFocus={() => setIsSearchFocused(true)}
+                    />
+                    {assetSearchTerm && (
+                      <button
+                        type="button"
+                        onClick={() => setAssetSearchTerm('')}
+                        style={{
+                          position: 'absolute',
+                          right: 10,
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          border: 'none',
+                          background: 'transparent',
+                          color: '#94a3b8',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <X size={15} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Dropdown Gợi ý thông minh */}
+                  {isSearchFocused && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        right: 0,
+                        zIndex: 50,
+                        marginTop: 4,
+                        background: '#ffffff',
+                        borderRadius: 8,
+                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+                        border: '1px solid #cbd5e1',
+                        maxHeight: 280,
+                        overflowY: 'auto'
+                      }}
+                    >
+                      <div style={{
+                        padding: '6px 12px',
+                        background: '#f1f5f9',
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        color: '#475569',
+                        borderBottom: '1px solid #e2e8f0',
+                        display: 'flex',
+                        justifyContent: 'space-between'
+                      }}>
+                        <span>GỢI Ý TÀI SẢN PHÙ HỢP ({filteredAssetSuggestions.length})</span>
+                        <span style={{ cursor: 'pointer', color: '#64748b' }} onClick={() => setIsSearchFocused(false)}>Đóng</span>
+                      </div>
+                      {filteredAssetSuggestions.length === 0 ? (
+                        <div style={{ padding: '16px', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>
+                          Không tìm thấy tài sản nào phù hợp với từ khóa "{assetSearchTerm}"
+                        </div>
+                      ) : (
+                        filteredAssetSuggestions.map((a) => (
+                          <div
+                            key={a.id}
+                            onClick={() => {
+                              setSelectedAssetId(a.id);
+                              setAssetSearchTerm(`[${a.code}] ${a.name}`);
+                              setIsSearchFocused(false);
+                            }}
+                            style={{
+                              padding: '10px 14px',
+                              borderBottom: '1px solid #f1f5f9',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 2,
+                              transition: 'background 0.15s ease'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = '#ffffff'}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.875rem' }}>
+                                <span style={{ color: '#2563eb' }}>[{a.code}]</span> {a.name}
+                              </span>
+                              <span className="badge badge-info" style={{ fontSize: '0.7rem' }}>
+                                {a.departmentName || 'Chưa gán đơn vị'}
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', gap: 12, fontSize: '0.775rem', color: '#64748b' }}>
+                              <span>📍 Vị trí: <strong>{a.locationPath || 'Chưa xếp'}</strong></span>
+                              <span>👤 Người giữ: <strong>{a.currentUser || a.responsiblePerson || 'N/A'}</strong></span>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Card thông tin chi tiết tài sản đã chọn */
+                <div style={{
+                  background: '#f0fdf4',
+                  border: '1px solid #bbf7d0',
+                  borderRadius: '8px',
+                  padding: '12px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 6
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontWeight: 700, color: '#166534', fontSize: '0.95rem' }}>
+                      <span style={{ color: '#047857', background: '#d1fae5', padding: '2px 6px', borderRadius: 4, marginRight: 6 }}>
+                        {targetAsset.code}
+                      </span>
+                      {targetAsset.name}
+                    </div>
+                    <span className="badge badge-success" style={{ fontSize: '0.75rem' }}>Đã chọn</span>
+                  </div>
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                    gap: '6px 12px',
+                    fontSize: '0.825rem',
+                    color: '#374151',
+                    marginTop: 4,
+                    paddingTop: 6,
+                    borderTop: '1px dashed #86efac'
+                  }}>
+                    <div><strong>🏢 Đơn vị hiện tại:</strong> {targetAsset.departmentName}</div>
+                    <div><strong>📍 Vị trí hiện tại:</strong> {targetAsset.locationPath || 'Chưa cập nhật'}</div>
+                    <div><strong>👤 Người bàn giao:</strong> {targetAsset.currentUser || targetAsset.responsiblePerson || 'Chưa có'}</div>
+                    <div><strong>🏷️ Nhãn hiệu / Model:</strong> {targetAsset.brand || 'N/A'}</div>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Đến đơn vị mới */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
