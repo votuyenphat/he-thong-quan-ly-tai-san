@@ -7,7 +7,6 @@ import { formatDateTime } from '../../utils/formatters';
 import { 
   Bell, 
   ChevronDown, 
-  RotateCcw, 
   Shield, 
   LogOut,
   Building2,
@@ -16,7 +15,7 @@ import {
 
 export default function Navbar({ setActiveTab }) {
   const { currentUser, switchRole, logout } = useAuth();
-  const { alerts, resetToDemoData } = useAssets();
+  const { alerts } = useAssets();
   const [showRoleMenu, setShowRoleMenu] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
 
@@ -68,21 +67,6 @@ export default function Navbar({ setActiveTab }) {
 
       {/* Action Center: Role Switcher, Alerts, User Info */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-        {/* Reset Demo Data Button */}
-        <button 
-          className="btn btn-secondary btn-sm" 
-          onClick={() => {
-            if (window.confirm('Khôi phục dữ liệu mẫu ban đầu của hệ thống?')) {
-              resetToDemoData();
-            }
-          }}
-          title="Khôi phục dữ liệu mẫu"
-          style={{ fontSize: '0.78rem' }}
-        >
-          <RotateCcw size={14} />
-          Khôi phục mẫu
-        </button>
-
         {/* Quick Role Switcher (4 Roles) */}
         <div style={{ position: 'relative' }}>
           <button 
