@@ -35,6 +35,6 @@ lerna-debug.log*
 
 # Local data
 *.local
-data/
+/data/
 *.tmp
 

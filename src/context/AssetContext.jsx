@@ -10,6 +10,12 @@ import {
   INITIAL_INVENTORY_SESSIONS,
   INITIAL_AUDIT_LOGS
 } from '../data/mockData';
+import {
+  SAMPLE_DEPARTMENTS,
+  SAMPLE_LOCATIONS,
+  SAMPLE_ASSETS,
+  SAMPLE_AUDIT_LOGS
+} from '../data/sampleData';
 import { useAuth } from './AuthContext';
 import {
   cleanText,
@@ -26,6 +32,12 @@ import {
   exportBackupToFile,
   readBackupFromFile
 } from '../services/syncService';
+import {
+  isSupabaseEnabled,
+  fetchDataFromSupabase,
+  pushDataToSupabase,
+  subscribeToSupabaseRealtime
+} from '../services/supabaseSync';
 
 const AssetContext = createContext();
 
@@ -166,17 +178,28 @@ export function AssetProvider({ children }) {
   useEffect(() => { localStorage.setItem('qlts_statuses', JSON.stringify(statusOptions)); }, [statusOptions]);
 
   // ========================================================
-  // HỆ THỐNG ĐỒNG BỘ DỮ LIỆU ĐA THIẾT BỊ (REAL-TIME SYNC)
+  // HỆ THỐNG ĐỒNG BỘ DỮ LIỆU ĐA THIẾT BỊ (SUPABASE CLOUD & LOCAL SYNC)
   // ========================================================
   const [syncStatus, setSyncStatus] = useState('syncing'); // 'synced' | 'syncing' | 'offline' | 'error'
   const [lastSyncTime, setLastSyncTime] = useState(null);
   const [syncError, setSyncError] = useState(null);
+  const [syncEngine, setSyncEngine] = useState(() => isSupabaseEnabled() ? 'supabase' : 'local');
+  const [engineReloadKey, setEngineReloadKey] = useState(0);
 
   const isIncomingSyncRef = useRef(false);
   const isInitializedRef = useRef(false);
 
-  // Áp dụng dữ liệu từ máy chủ trung tâm vào React state
+  // Kích hoạt nạp lại engine đồng bộ khi người dùng đổi cấu hình
+  const reconnectSyncEngine = useCallback(() => {
+    const isSupa = isSupabaseEnabled();
+    setSyncEngine(isSupa ? 'supabase' : 'local');
+    isInitializedRef.current = false;
+    setEngineReloadKey(k => k + 1);
+  }, []);
+
+  // Áp dụng dữ liệu từ máy chủ trung tâm / Supabase vào React state
   const applyServerData = useCallback((serverData) => {
+    if (!serverData) return;
     isIncomingSyncRef.current = true;
     if (Array.isArray(serverData.assets)) {
       setAssets(sanitizeAssetList(serverData.assets));
@@ -217,19 +240,28 @@ export function AssetProvider({ children }) {
     setSyncError(null);
   }, []);
 
-  // 1. Khởi tạo ban đầu: Kết nối máy chủ và đồng bộ dữ liệu 2 chiều
+  // 1. Khởi tạo ban đầu: Kết nối Supabase Cloud hoặc Server LAN và đồng bộ 2 chiều
   useEffect(() => {
     let mounted = true;
 
     async function initSync() {
       setSyncStatus('syncing');
       try {
-        const serverData = await fetchServerData();
+        let serverData = null;
+
+        if (syncEngine === 'supabase') {
+          serverData = await fetchDataFromSupabase();
+        } else {
+          serverData = await fetchServerData();
+        }
+
         if (!mounted) return;
 
-        const serverHasData = (serverData.assets && serverData.assets.length > 0) ||
-                              (serverData.departments && serverData.departments.length > 0) ||
-                              (serverData.lastUpdated && serverData.lastUpdated > 0);
+        const serverHasData = serverData && (
+          (serverData.assets && serverData.assets.length > 0) ||
+          (serverData.departments && serverData.departments.length > 0) ||
+          (serverData.lastUpdated && serverData.lastUpdated > 0)
+        );
 
         // Kiểm tra xem trình duyệt hiện tại đã có dữ liệu trong localStorage chưa
         const localSavedAssets = localStorage.getItem('qlts_assets');
@@ -238,10 +270,10 @@ export function AssetProvider({ children }) {
         const localDeptsCount = localSavedDepts ? JSON.parse(localSavedDepts).length : 0;
 
         if (serverHasData) {
-          // Máy chủ đã có dữ liệu -> nạp dữ liệu máy chủ vào thiết bị này
+          // Máy chủ/Cloud đã có dữ liệu -> nạp dữ liệu vào thiết bị này
           applyServerData(serverData);
         } else if (localAssetsCount > 0 || localDeptsCount > 0) {
-          // Máy chủ trống nhưng máy này đã có dữ liệu sẵn -> tự động đẩy lên máy chủ làm dữ liệu gốc
+          // Máy chủ trống nhưng máy này đã có dữ liệu sẵn -> tự động đẩy lên làm dữ liệu gốc
           const payload = {
             assets,
             departments,
@@ -256,7 +288,12 @@ export function AssetProvider({ children }) {
             statusOptions,
             lastUpdated: Date.now()
           };
-          await pushServerData(payload);
+
+          if (syncEngine === 'supabase') {
+            await pushDataToSupabase(payload);
+          } else {
+            await pushServerData(payload);
+          }
           setLastSyncTime(payload.lastUpdated);
           setSyncStatus('synced');
         } else {
@@ -264,7 +301,7 @@ export function AssetProvider({ children }) {
           setLastSyncTime(Date.now());
         }
       } catch (err) {
-        console.warn('[Sync] Máy chủ ngoại tuyến hoặc chưa kết nối:', err.message);
+        console.warn(`[Sync][${syncEngine}] Lỗi kết nối khởi tạo:`, err.message);
         if (mounted) {
           setSyncStatus('offline');
           setSyncError(err.message);
@@ -282,9 +319,9 @@ export function AssetProvider({ children }) {
       mounted = false;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [applyServerData]);
+  }, [applyServerData, syncEngine, engineReloadKey]);
 
-  // 2. Tự động đẩy thay đổi lên máy chủ khi người dùng thao tác trên thiết bị này (Debounce 500ms)
+  // 2. Tự động đẩy thay đổi lên máy chủ / Supabase khi người dùng thao tác (Debounce 600ms)
   useEffect(() => {
     if (!isInitializedRef.current) return;
     if (isIncomingSyncRef.current) {
@@ -309,17 +346,27 @@ export function AssetProvider({ children }) {
           statusOptions,
           lastUpdated: Date.now()
         };
-        const res = await pushServerData(payload);
-        if (res && res.status === 'ok') {
-          setLastSyncTime(res.lastUpdated || payload.lastUpdated);
-          setSyncStatus('synced');
-          setSyncError(null);
+
+        if (syncEngine === 'supabase') {
+          const res = await pushDataToSupabase(payload);
+          if (res && res.status === 'ok') {
+            setLastSyncTime(res.lastUpdated || payload.lastUpdated);
+            setSyncStatus('synced');
+            setSyncError(null);
+          }
+        } else {
+          const res = await pushServerData(payload);
+          if (res && res.status === 'ok') {
+            setLastSyncTime(res.lastUpdated || payload.lastUpdated);
+            setSyncStatus('synced');
+            setSyncError(null);
+          }
         }
       } catch (err) {
         setSyncStatus('offline');
         setSyncError(err.message);
       }
-    }, 500);
+    }, 600);
 
     return () => clearTimeout(timer);
   }, [
@@ -333,20 +380,67 @@ export function AssetProvider({ children }) {
     auditLogs,
     assetTypeOptions,
     conditionOptions,
-    statusOptions
+    statusOptions,
+    syncEngine
   ]);
 
-  // 3. Định kỳ thăm dò máy chủ để cập nhật dữ liệu từ thiết bị khác (Polling mỗi 2.5s)
+  // 3. Cơ chế đồng bộ nhận dữ liệu từ các thiết bị khác:
+  // - Nếu là Supabase: Kích hoạt WebSocket Realtime (Độ trễ < 200ms)
+  // - Nếu là Server LAN/Local: Dùng Polling kiểm tra phiên bản định kỳ mỗi 2.5s
   useEffect(() => {
     let active = true;
 
+    if (syncEngine === 'supabase') {
+      const unsubscribe = subscribeToSupabaseRealtime(
+        (remoteData) => {
+          if (!active || !isInitializedRef.current) return;
+          if (remoteData && remoteData.lastUpdated && (!lastSyncTime || remoteData.lastUpdated > lastSyncTime)) {
+            applyServerData(remoteData);
+          }
+        },
+        (channelStatus) => {
+          if (!active) return;
+          if (channelStatus === 'SUBSCRIBED') {
+            setSyncStatus('synced');
+            setSyncError(null);
+          } else if (channelStatus === 'CHANNEL_ERROR' || channelStatus === 'TIMED_OUT') {
+            setSyncStatus('offline');
+          }
+        }
+      );
+
+      // Đồng bộ lại khi quay lại tab / mở khóa màn hình điện thoại
+      const handleVisibilityChange = async () => {
+        if (document.visibilityState === 'visible' && isInitializedRef.current) {
+          try {
+            const fresh = await fetchDataFromSupabase();
+            if (active && fresh && fresh.lastUpdated && fresh.lastUpdated > (lastSyncTime || 0)) {
+              applyServerData(fresh);
+            }
+          } catch (e) {
+            // silent catch on focus
+          }
+        }
+      };
+
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      window.addEventListener('focus', handleVisibilityChange);
+
+      return () => {
+        active = false;
+        unsubscribe();
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        window.removeEventListener('focus', handleVisibilityChange);
+      };
+    }
+
+    // Chế độ Server LAN: Polling mỗi 2.5s
     async function checkServerUpdates() {
       if (!isInitializedRef.current) return;
       try {
         const ver = await fetchServerVersion();
         if (!active) return;
 
-        // Nếu máy chủ có cập nhật mới hơn lần đồng bộ cuối
         if (ver && ver.lastUpdated && lastSyncTime && ver.lastUpdated > lastSyncTime) {
           setSyncStatus('syncing');
           const fullData = await fetchServerData();
@@ -366,7 +460,6 @@ export function AssetProvider({ children }) {
 
     const intervalId = setInterval(checkServerUpdates, 2500);
 
-    // Đồng bộ ngay khi người dùng quay lại tab hoặc mở màn hình điện thoại
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         checkServerUpdates();
@@ -385,14 +478,21 @@ export function AssetProvider({ children }) {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', handleFocus);
     };
-  }, [lastSyncTime, applyServerData, syncStatus]);
+  }, [syncEngine, lastSyncTime, applyServerData, syncStatus]);
 
-  // Cưỡng bức làm mới dữ liệu từ máy chủ
+  // Cưỡng bức làm mới dữ liệu từ máy chủ / Supabase
   const syncNow = async () => {
     setSyncStatus('syncing');
     try {
-      const data = await fetchServerData();
-      applyServerData(data);
+      let data = null;
+      if (syncEngine === 'supabase') {
+        data = await fetchDataFromSupabase();
+      } else {
+        data = await fetchServerData();
+      }
+      if (data) {
+        applyServerData(data);
+      }
       return { success: true };
     } catch (err) {
       setSyncStatus('offline');
@@ -401,7 +501,7 @@ export function AssetProvider({ children }) {
     }
   };
 
-  // Cưỡng chế đẩy toàn bộ dữ liệu máy này lên máy chủ
+  // Cưỡng chế đẩy toàn bộ dữ liệu máy này lên máy chủ / Supabase
   const forcePushToServer = async () => {
     setSyncStatus('syncing');
     try {
@@ -419,8 +519,15 @@ export function AssetProvider({ children }) {
         statusOptions,
         lastUpdated: Date.now()
       };
-      const res = await pushServerData(payload);
-      setLastSyncTime(res.lastUpdated || payload.lastUpdated);
+
+      if (syncEngine === 'supabase') {
+        const res = await pushDataToSupabase(payload);
+        setLastSyncTime(res.lastUpdated || payload.lastUpdated);
+      } else {
+        const res = await pushServerData(payload);
+        setLastSyncTime(res.lastUpdated || payload.lastUpdated);
+      }
+
       setSyncStatus('synced');
       setSyncError(null);
       return { success: true };
@@ -1068,18 +1175,97 @@ export function AssetProvider({ children }) {
   };
 
 
+  // Khởi tạo nạp dữ liệu mẫu chuẩn (Khoa/Phòng ban, Cây vị trí, Danh mục tài sản)
+  const loadSampleData = async () => {
+    setAssets(SAMPLE_ASSETS);
+    setDepartments(SAMPLE_DEPARTMENTS);
+    setLocations(SAMPLE_LOCATIONS);
+    setAuditLogs(SAMPLE_AUDIT_LOGS);
+
+    const payload = {
+      assets: SAMPLE_ASSETS,
+      departments: SAMPLE_DEPARTMENTS,
+      locations: SAMPLE_LOCATIONS,
+      transfers: [],
+      recalls: [],
+      liquidations: [],
+      inventorySessions: [],
+      auditLogs: SAMPLE_AUDIT_LOGS,
+      assetTypeOptions,
+      conditionOptions,
+      statusOptions,
+      lastUpdated: Date.now()
+    };
+
+    try {
+      if (syncEngine === 'supabase') {
+        await pushDataToSupabase(payload);
+      } else {
+        await pushServerData(payload);
+      }
+      setLastSyncTime(payload.lastUpdated);
+      setSyncStatus('synced');
+    } catch (err) {
+      console.warn('Lỗi đồng bộ khi nạp dữ liệu mẫu:', err);
+    }
+
+    addAuditLog('Khởi tạo dữ liệu', 'Toàn bộ hệ thống', 'Nạp dữ liệu mẫu thành công gồm 4 phòng ban, vị trí và tài sản');
+    return { success: true, count: SAMPLE_ASSETS.length };
+  };
+
+  // Xóa toàn bộ dữ liệu để nhập mới từ đầu
+  const clearAllData = async () => {
+    const emptyPayload = {
+      assets: [],
+      departments: [],
+      locations: [],
+      transfers: [],
+      recalls: [],
+      liquidations: [],
+      inventorySessions: [],
+      auditLogs: [],
+      assetTypeOptions,
+      conditionOptions,
+      statusOptions,
+      lastUpdated: Date.now()
+    };
+
+    setAssets([]);
+    setDepartments([]);
+    setLocations([]);
+    setTransfers([]);
+    setRecalls([]);
+    setLiquidations([]);
+    setInventorySessions([]);
+    setAuditLogs([]);
+
+    localStorage.removeItem('qlts_assets');
+    localStorage.removeItem('qlts_departments');
+    localStorage.removeItem('qlts_locations');
+    localStorage.removeItem('qlts_transfers');
+    localStorage.removeItem('qlts_recalls');
+    localStorage.removeItem('qlts_liquidations');
+    localStorage.removeItem('qlts_inventory_sessions');
+    localStorage.removeItem('qlts_audit_logs');
+
+    try {
+      if (syncEngine === 'supabase') {
+        await pushDataToSupabase(emptyPayload);
+      } else {
+        await pushServerData(emptyPayload);
+      }
+      setLastSyncTime(emptyPayload.lastUpdated);
+      setSyncStatus('synced');
+    } catch (err) {
+      console.warn('Lỗi đồng bộ khi xóa dữ liệu:', err);
+    }
+
+    return { success: true };
+  };
+
   // Reset demo data helper
   const resetToDemoData = () => {
-    setAssets(INITIAL_ASSETS);
-    setDepartments(INITIAL_DEPARTMENTS);
-    setLocations(INITIAL_LOCATIONS);
-    setTransfers(INITIAL_TRANSFERS);
-    setRecalls(INITIAL_RECALLS);
-    setLiquidations(INITIAL_LIQUIDATIONS);
-    setInventorySessions(INITIAL_INVENTORY_SESSIONS);
-    setAuditLogs(INITIAL_AUDIT_LOGS);
-    localStorage.clear();
-    addAuditLog('Khôi phục dữ liệu', 'Toàn bộ hệ thống', 'Khôi phục dữ liệu ban đầu từ kho mẫu');
+    loadSampleData();
   };
 
   // =========== LOCATION MANAGEMENT ===========
@@ -1257,6 +1443,8 @@ export function AssetProvider({ children }) {
       recordInventoryItem,
       addAuditLog,
       resetToDemoData,
+      loadSampleData,
+      clearAllData,
       addLocation,
       updateLocation,
       deleteLocation,
@@ -1264,6 +1452,8 @@ export function AssetProvider({ children }) {
       updateDepartment,
       deleteDepartment,
       // Multi-device sync
+      syncEngine,
+      reconnectSyncEngine,
       syncStatus,
       lastSyncTime,
       syncError,

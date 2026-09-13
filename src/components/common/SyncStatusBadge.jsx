@@ -1,18 +1,18 @@
 // src/components/common/SyncStatusBadge.jsx
 import React, { useState } from 'react';
-import { Wifi, WifiOff, RefreshCw } from 'lucide-react';
+import { Wifi, WifiOff, RefreshCw, Zap } from 'lucide-react';
 import { useAssets } from '../../context/AssetContext';
 import SyncModal from './SyncModal';
 
 export default function SyncStatusBadge() {
-  const { syncStatus } = useAssets();
+  const { syncStatus, syncEngine } = useAssets();
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   let bg = '#f0fdf4';
   let border = '#bbf7d0';
   let color = '#16a34a';
-  let label = 'Đã đồng bộ';
-  let icon = <Wifi size={14} />;
+  let label = syncEngine === 'supabase' ? '⚡ Supabase Online' : 'Đã đồng bộ';
+  let icon = syncEngine === 'supabase' ? <Zap size={14} /> : <Wifi size={14} />;
 
   if (syncStatus === 'syncing') {
     bg = '#eff6ff';
@@ -24,7 +24,7 @@ export default function SyncStatusBadge() {
     bg = '#fffbeb';
     border = '#fde68a';
     color = '#d97706';
-    label = 'Ngoại tuyến';
+    label = syncEngine === 'supabase' ? 'Supabase Offline' : 'Ngoại tuyến';
     icon = <WifiOff size={14} />;
   }
 
