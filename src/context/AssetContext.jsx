@@ -683,26 +683,132 @@ export function AssetProvider({ children }) {
     return asset;
   };
 
-  // Batch import assets from Excel
+  // Đồng bộ cây vị trí địa lý 4 cấp từ danh mục tài sản
+  const syncLocationsFromAssets = (customAssets = null) => {
+    const list = customAssets || assets;
+    const LEVEL_TYPES = [
+      { type: 'CAMPUS', label: 'Cơ sở' },
+      { type: 'AREA', label: 'Khu/Tòa' },
+      { type: 'FLOOR', label: 'Tầng' },
+      { type: 'ROOM', label: 'Phòng' }
+    ];
+
+    const rootNodes = deduplicateAndMergeLocationTree(locations || []);
+
+    list.forEach(asset => {
+      if (!asset.locationPath || !asset.locationPath.trim()) return;
+
+      const rawPath = cleanText(asset.locationPath);
+      let parts = rawPath.split(/\s*>\s*/).map(p => cleanText(p)).filter(Boolean);
+      if (parts.length === 0) {
+        parts = rawPath.split(/\s*;\s*/).map(p => cleanText(p)).filter(Boolean);
+      }
+      if (parts.length === 0) return;
+
+      let currentLevelNodes = rootNodes;
+      let currentPath = '';
+
+      parts.forEach((partName, idx) => {
+        const cleanPart = cleanText(partName);
+        if (!cleanPart) return;
+        currentPath = currentPath ? `${currentPath} > ${cleanPart}` : cleanPart;
+        const key = cleanPart.toLowerCase();
+        let node = currentLevelNodes.find(n => cleanText(n.name).toLowerCase() === key);
+
+        if (!node) {
+          const depth = Math.min(idx, 3);
+          node = {
+            id: `loc-auto-${encodeURIComponent(cleanText(currentPath)).replace(/%/g, '').slice(0, 35)}-${idx}`,
+            name: cleanPart,
+            code: cleanPart.slice(0, 10).toUpperCase(),
+            type: LEVEL_TYPES[depth]?.type || 'ROOM',
+            children: []
+          };
+          currentLevelNodes.push(node);
+        } else {
+          if (!Array.isArray(node.children)) node.children = [];
+        }
+
+        currentLevelNodes = node.children;
+      });
+    });
+
+    const finalTree = deduplicateAndMergeLocationTree(rootNodes);
+    setLocations(finalTree);
+    addAuditLog('Đồng bộ vị trí', 'Cây địa lý', `Đồng bộ cây vị trí địa lý từ danh mục ${list.length} tài sản`);
+    return finalTree;
+  };
+
+  // Batch import assets from Excel (Tự động nhận diện & tạo Cây Phòng/Ban và Cây Vị Trí)
   const importAssetsBatch = (importedList) => {
     const dateStr = new Date().toISOString().slice(0, 10);
     const cleanedList = sanitizeAssetList(importedList);
-    const newAssets = cleanedList.map((item, idx) => ({
-      ...item,
-      id: `as-${Date.now()}-${idx}`,
-      history: [
-        {
-          id: `h-${Date.now()}-${idx}`,
-          date: dateStr,
-          action: 'Nhập từ file Excel',
-          actor: currentUser ? currentUser.name : 'Thủ kho',
-          detail: 'Nhập hàng loạt từ tập tin bảng tính Excel'
-        }
-      ],
-      documents: []
-    }));
+
+    // 1. Tự động nhận diện và tạo phòng ban mới vào Cây Phòng/Ban từ file Excel
+    const existingDeptMap = new Map();
+    departments.forEach(d => {
+      if (d.name) existingDeptMap.set(cleanText(d.name).toLowerCase(), d);
+      if (d.id) existingDeptMap.set(cleanText(d.id).toLowerCase(), d);
+    });
+
+    const newlyCreatedDepts = [];
+    cleanedList.forEach((item, idx) => {
+      const dName = cleanText(item.departmentName);
+      if (!dName) return;
+      const lower = dName.toLowerCase();
+      if (!existingDeptMap.has(lower)) {
+        // Tự sinh mã phòng ban viết tắt (ví dụ: "Khoa Công nghệ Thông tin" -> "CNTT")
+        const words = dName.split(/\s+/).filter(w => !['và', '&', 'của', 'ở', 'tại', 'thuộc'].includes(w.toLowerCase()));
+        let code = words.map(w => w[0]).join('').toUpperCase();
+        if (code.length < 2) code = `PB-${existingDeptMap.size + 1}`;
+
+        const newDept = {
+          id: `dept-${Date.now()}-${idx}`,
+          code,
+          name: dName,
+          manager: cleanText(item.responsiblePerson) || 'Trưởng đơn vị',
+          phone: '',
+          email: '',
+          description: 'Tự động tạo từ tệp Excel nhập tài sản',
+          createdAt: new Date().toISOString()
+        };
+        existingDeptMap.set(lower, newDept);
+        newlyCreatedDepts.push(newDept);
+      }
+    });
+
+    if (newlyCreatedDepts.length > 0) {
+      setDepartments(prev => [...prev, ...newlyCreatedDepts]);
+      addAuditLog('Tự động tạo phòng ban', `Tạo ${newlyCreatedDepts.length} phòng ban`, `Trích xuất từ tệp Excel: ${newlyCreatedDepts.map(d => d.name).join(', ')}`);
+    }
+
+    // 2. Gán departmentId chính xác cho từng tài sản mới
+    const newAssets = cleanedList.map((item, idx) => {
+      const dName = cleanText(item.departmentName);
+      const matched = dName ? existingDeptMap.get(dName.toLowerCase()) : null;
+      return {
+        ...item,
+        id: `as-${Date.now()}-${idx}`,
+        departmentId: matched ? matched.id : (item.departmentId || 'pb-default'),
+        departmentName: matched ? matched.name : (item.departmentName || 'Chưa phân bổ'),
+        history: [
+          {
+            id: `h-${Date.now()}-${idx}`,
+            date: dateStr,
+            action: 'Nhập từ file Excel',
+            actor: currentUser ? currentUser.name : 'Thủ kho',
+            detail: 'Nhập hàng loạt từ tập tin bảng tính Excel'
+          }
+        ],
+        documents: []
+      };
+    });
 
     setAssets(prev => [...newAssets, ...prev]);
+
+    // 3. Tự động đồng bộ các cấp vị trí từ cột "Vị trí cụ thể" vào Cây Vị Trí (4 cấp)
+    syncLocationsFromAssets([...newAssets, ...assets]);
+
     addAuditLog('Nhập Excel', `Nhập ${newAssets.length} tài sản`, `Người thực hiện: ${currentUser?.name}`);
   };
 
@@ -1276,61 +1382,6 @@ export function AssetProvider({ children }) {
   const updateLocation = (id, updatedData) => {
     setLocations(prev => updateNodeInTree(prev, id, node => ({ ...node, ...updatedData })));
     addAuditLog('Cập nhật vị trí', updatedData.name || id, `Chỉnh sửa thông tin vị trí`);
-  };
-
-  const syncLocationsFromAssets = (customAssets = null) => {
-    const list = customAssets || assets;
-    const LEVEL_TYPES = [
-      { type: 'CAMPUS', label: 'Cơ sở' },
-      { type: 'AREA', label: 'Khu/Tòa' },
-      { type: 'FLOOR', label: 'Tầng' },
-      { type: 'ROOM', label: 'Phòng' }
-    ];
-
-    const rootNodes = deduplicateAndMergeLocationTree(locations || []);
-
-    list.forEach(asset => {
-      if (!asset.locationPath || !asset.locationPath.trim()) return;
-
-      const rawPath = cleanText(asset.locationPath);
-      let parts = rawPath.split(/\s*>\s*/).map(p => cleanText(p)).filter(Boolean);
-      if (parts.length === 0) {
-        parts = rawPath.split(/\s*;\s*/).map(p => cleanText(p)).filter(Boolean);
-      }
-      if (parts.length === 0) return;
-
-      let currentLevelNodes = rootNodes;
-      let currentPath = '';
-
-      parts.forEach((partName, idx) => {
-        const cleanPart = cleanText(partName);
-        if (!cleanPart) return;
-        currentPath = currentPath ? `${currentPath} > ${cleanPart}` : cleanPart;
-        const key = cleanPart.toLowerCase();
-        let node = currentLevelNodes.find(n => cleanText(n.name).toLowerCase() === key);
-
-        if (!node) {
-          const depth = Math.min(idx, 3);
-          node = {
-            id: `loc-auto-${encodeURIComponent(cleanText(currentPath)).replace(/%/g, '').slice(0, 35)}-${idx}`,
-            name: cleanPart,
-            code: cleanPart.slice(0, 10).toUpperCase(),
-            type: LEVEL_TYPES[depth]?.type || 'ROOM',
-            children: []
-          };
-          currentLevelNodes.push(node);
-        } else {
-          if (!Array.isArray(node.children)) node.children = [];
-        }
-
-        currentLevelNodes = node.children;
-      });
-    });
-
-    const finalTree = deduplicateAndMergeLocationTree(rootNodes);
-    setLocations(finalTree);
-    addAuditLog('Đồng bộ vị trí', 'Cây địa lý', `Đồng bộ cây vị trí địa lý từ danh mục ${list.length} tài sản`);
-    return finalTree;
   };
 
   const deleteLocation = (id) => {
