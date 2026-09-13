@@ -27,8 +27,7 @@ import {
   Building,
   TrendingUp,
   ShieldAlert,
-  ArrowRight,
-  Sparkles
+  ArrowRight
 } from 'lucide-react';
 
 import {
@@ -51,7 +50,7 @@ ChartJS.register(
 );
 
 export default function Dashboard({ setActiveTab }) {
-  const { assets, departments, alerts, loadSampleData } = useAssets();
+  const { assets, departments, alerts } = useAssets();
 
   // 1. KPI Counts (chuẩn hóa trạng thái và tình trạng)
   const totalAssetCodes = assets.length;
@@ -215,70 +214,6 @@ export default function Dashboard({ setActiveTab }) {
         </div>
       </div>
 
-      {/* Thông báo khởi tạo dữ liệu mẫu khi hệ thống trống */}
-      {assets.length === 0 && departments.length === 0 && (
-        <div style={{
-          background: 'linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%)',
-          border: '1px solid #bfdbfe',
-          borderRadius: '12px',
-          padding: '16px 20px',
-          marginBottom: '20px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '12px',
-          boxShadow: '0 2px 4px rgba(37,99,235,0.06)'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div style={{
-              width: 42,
-              height: 42,
-              borderRadius: 10,
-              background: '#2563eb',
-              color: '#ffffff',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 3px 6px rgba(37,99,235,0.3)',
-              flexShrink: 0
-            }}>
-              <Sparkles size={22} />
-            </div>
-            <div>
-              <div style={{ fontWeight: 700, color: '#1e293b', fontSize: '0.98rem' }}>
-                Hệ thống chưa có dữ liệu ban đầu
-              </div>
-              <div style={{ fontSize: '0.84rem', color: '#64748b', marginTop: 2 }}>
-                Bạn có thể nạp ngay bộ dữ liệu mẫu (4 phòng ban, cây vị trí, 9 tài sản) để trải nghiệm toàn bộ tính năng và kiểm tra đồng bộ Online.
-              </div>
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              className="btn btn-primary"
-              style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.85rem', padding: '8px 16px' }}
-              onClick={async () => {
-                if (window.confirm('Khởi tạo bộ dữ liệu mẫu chuẩn gồm 4 khoa/phòng ban, cây vị trí và tài sản?')) {
-                  await loadSampleData();
-                }
-              }}
-            >
-              <Sparkles size={16} /> Nạp Dữ Liệu Mẫu
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              style={{ fontSize: '0.85rem', padding: '8px 16px' }}
-              onClick={() => setActiveTab('inbound')}
-            >
-              Nhập Excel Mới
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* 1. TỔNG QUAN TÀI SẢN (6 Chỉ số KPI) */}
       <div className="dashboard-grid-kpi">
         {/* Tổng số */}
@@ -427,21 +362,12 @@ export default function Dashboard({ setActiveTab }) {
               <p style={{ fontSize: '0.8rem', margin: '0 0 12px 0', maxWidth: 300, color: '#64748b' }}>
                 Hãy thêm các phòng ban, khoa vào sơ đồ tổ chức để theo dõi thống kê tài sản.
               </p>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  className="btn btn-primary btn-sm"
-                  style={{ display: 'flex', alignItems: 'center', gap: 4 }}
-                  onClick={() => loadSampleData()}
-                >
-                  <Sparkles size={13} /> Nạp dữ liệu mẫu
-                </button>
-                <button
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => setActiveTab('departments')}
-                >
-                  Đến Cây Phòng/Ban
-                </button>
-              </div>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => setActiveTab('departments')}
+              >
+                Đến Cây Phòng/Ban
+              </button>
             </div>
           ) : (
             <div style={{ height: '270px' }}>

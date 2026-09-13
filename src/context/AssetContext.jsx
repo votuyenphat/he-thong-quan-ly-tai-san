@@ -10,12 +10,6 @@ import {
   INITIAL_INVENTORY_SESSIONS,
   INITIAL_AUDIT_LOGS
 } from '../data/mockData';
-import {
-  SAMPLE_DEPARTMENTS,
-  SAMPLE_LOCATIONS,
-  SAMPLE_ASSETS,
-  SAMPLE_AUDIT_LOGS
-} from '../data/sampleData';
 import { useAuth } from './AuthContext';
 import {
   cleanText,
@@ -1175,44 +1169,6 @@ export function AssetProvider({ children }) {
   };
 
 
-  // Khởi tạo nạp dữ liệu mẫu chuẩn (Khoa/Phòng ban, Cây vị trí, Danh mục tài sản)
-  const loadSampleData = async () => {
-    setAssets(SAMPLE_ASSETS);
-    setDepartments(SAMPLE_DEPARTMENTS);
-    setLocations(SAMPLE_LOCATIONS);
-    setAuditLogs(SAMPLE_AUDIT_LOGS);
-
-    const payload = {
-      assets: SAMPLE_ASSETS,
-      departments: SAMPLE_DEPARTMENTS,
-      locations: SAMPLE_LOCATIONS,
-      transfers: [],
-      recalls: [],
-      liquidations: [],
-      inventorySessions: [],
-      auditLogs: SAMPLE_AUDIT_LOGS,
-      assetTypeOptions,
-      conditionOptions,
-      statusOptions,
-      lastUpdated: Date.now()
-    };
-
-    try {
-      if (syncEngine === 'supabase') {
-        await pushDataToSupabase(payload);
-      } else {
-        await pushServerData(payload);
-      }
-      setLastSyncTime(payload.lastUpdated);
-      setSyncStatus('synced');
-    } catch (err) {
-      console.warn('Lỗi đồng bộ khi nạp dữ liệu mẫu:', err);
-    }
-
-    addAuditLog('Khởi tạo dữ liệu', 'Toàn bộ hệ thống', 'Nạp dữ liệu mẫu thành công gồm 4 phòng ban, vị trí và tài sản');
-    return { success: true, count: SAMPLE_ASSETS.length };
-  };
-
   // Xóa toàn bộ dữ liệu để nhập mới từ đầu
   const clearAllData = async () => {
     const emptyPayload = {
@@ -1263,9 +1219,9 @@ export function AssetProvider({ children }) {
     return { success: true };
   };
 
-  // Reset demo data helper
+  // Reset helper
   const resetToDemoData = () => {
-    loadSampleData();
+    clearAllData();
   };
 
   // =========== LOCATION MANAGEMENT ===========
@@ -1443,7 +1399,6 @@ export function AssetProvider({ children }) {
       recordInventoryItem,
       addAuditLog,
       resetToDemoData,
-      loadSampleData,
       clearAllData,
       addLocation,
       updateLocation,

@@ -20,8 +20,7 @@ import {
   Check,
   ExternalLink,
   ShieldCheck,
-  Trash2,
-  Sparkles
+  Trash2
 } from 'lucide-react';
 import { useAssets } from '../../context/AssetContext';
 import {
@@ -75,7 +74,6 @@ export default function SyncModal({ isOpen, onClose }) {
     syncError,
     syncNow,
     forcePushToServer,
-    loadSampleData,
     clearAllData,
     exportBackup,
     importBackup,
@@ -537,36 +535,7 @@ export default function SyncModal({ isOpen, onClose }) {
                   </button>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '4px' }}>
-                  <button
-                    onClick={async () => {
-                      if (window.confirm('Khởi tạo bộ dữ liệu mẫu chuẩn gồm 4 phòng ban, vị trí và 9 tài sản lên hệ thống?')) {
-                        setIsProcessing(true);
-                        await loadSampleData();
-                        setIsProcessing(false);
-                        setFeedback({ type: 'success', message: 'Đã nạp thành công bộ dữ liệu mẫu và đồng bộ lên Cloud!' });
-                      }
-                    }}
-                    disabled={isProcessing}
-                    style={{
-                      padding: '9px 12px',
-                      borderRadius: '10px',
-                      backgroundColor: '#eff6ff',
-                      border: '1px solid #bfdbfe',
-                      color: '#1d4ed8',
-                      cursor: 'pointer',
-                      fontSize: '0.8rem',
-                      fontWeight: 600,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px'
-                    }}
-                  >
-                    <Sparkles size={15} color="#2563eb" />
-                    Nạp dữ liệu mẫu
-                  </button>
-
+                <div style={{ marginTop: '4px' }}>
                   <button
                     onClick={async () => {
                       if (window.confirm('CẢNH BÁO: Hành động này sẽ xóa sạch dữ liệu (0 tài sản, 0 phòng ban) để bạn nhập mới từ đầu. Bạn có chắc chắn?')) {
@@ -578,6 +547,7 @@ export default function SyncModal({ isOpen, onClose }) {
                     }}
                     disabled={isProcessing}
                     style={{
+                      width: '100%',
                       padding: '9px 12px',
                       borderRadius: '10px',
                       backgroundColor: '#fff1f2',
@@ -593,7 +563,7 @@ export default function SyncModal({ isOpen, onClose }) {
                     }}
                   >
                     <Trash2 size={15} color="#e11d48" />
-                    Xóa sạch dữ liệu
+                    Xóa sạch dữ liệu (Đặt lại từ đầu)
                   </button>
                 </div>
               </div>
