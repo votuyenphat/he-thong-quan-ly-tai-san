@@ -718,7 +718,7 @@ export function AssetProvider({ children }) {
         if (!node) {
           const depth = Math.min(idx, 3);
           node = {
-            id: `loc-auto-${encodeURIComponent(cleanText(currentPath)).replace(/%/g, '').slice(0, 35)}-${idx}`,
+            id: `loc-${cleanText(currentPath).toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
             name: cleanPart,
             code: cleanPart.slice(0, 10).toUpperCase(),
             type: LEVEL_TYPES[depth]?.type || 'ROOM',

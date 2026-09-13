@@ -148,7 +148,7 @@ export function sanitizeAssetList(assets) {
  * - Gộp các node cùng tên ở cùng một cấp
  * - Hợp nhất danh sách children của các node trùng lặp một cách đệ quy
  */
-export function deduplicateAndMergeLocationTree(nodes) {
+export function deduplicateAndMergeLocationTree(nodes, parentPath = '') {
   if (!Array.isArray(nodes)) return [];
   const map = new Map();
 
@@ -156,11 +156,14 @@ export function deduplicateAndMergeLocationTree(nodes) {
     if (!rawNode || !rawNode.name) return;
     const normName = cleanText(rawNode.name);
     if (!normName) return;
+    const currentPath = parentPath ? `${parentPath} > ${normName}` : normName;
     const key = normName.toLowerCase();
+    const safeId = `loc-${cleanText(currentPath).toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
 
     if (!map.has(key)) {
       map.set(key, {
         ...rawNode,
+        id: safeId,
         name: normName,
         code: cleanText(rawNode.code),
         children: Array.isArray(rawNode.children) ? [...rawNode.children] : []
@@ -176,8 +179,9 @@ export function deduplicateAndMergeLocationTree(nodes) {
 
   const merged = Array.from(map.values());
   merged.forEach(node => {
+    const currentPath = parentPath ? `${parentPath} > ${node.name}` : node.name;
     if (node.children && node.children.length > 0) {
-      node.children = deduplicateAndMergeLocationTree(node.children);
+      node.children = deduplicateAndMergeLocationTree(node.children, currentPath);
     }
   });
   return merged;

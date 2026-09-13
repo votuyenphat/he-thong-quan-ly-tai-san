@@ -34,29 +34,17 @@ export default function LocationTreeSelector({
     return buildEffectiveLocationTree(locations, assets);
   }, [locations, assets]);
 
-  // Lấy chính xác danh sách ID các node trên đường dẫn từ gốc đến đích
-  const getPathNodeIds = (tree, targetFullPath) => {
-    const ids = [];
-    if (!targetFullPath) return ids;
-    const parts = cleanText(targetFullPath).split(/\s*>\s*/).map(p => cleanText(p).toLowerCase()).filter(Boolean);
-    let currentNodes = tree;
-    for (let i = 0; i < parts.length; i++) {
-      const p = parts[i];
-      const match = currentNodes.find(n => cleanText(n.name).toLowerCase() === p);
-      if (!match) break;
-      ids.push(match.id);
-      currentNodes = Array.isArray(match.children) ? match.children : [];
-    }
-    return ids;
-  };
-
   // Khi mở cây vị trí: chỉ mở rộng đường dẫn đến vị trí đang chọn (nếu có), không bung hết tất cả
   const handleToggleOpen = () => {
     if (!isOpen) {
       if (value && value.trim()) {
-        const pathIds = getPathNodeIds(effectiveTree, value);
+        const parts = cleanText(value).split(/\s*>\s*/).map(p => cleanText(p).toLowerCase()).filter(Boolean);
         const initialExpanded = {};
-        pathIds.forEach(id => { initialExpanded[id] = true; });
+        let cur = '';
+        for (let i = 0; i < parts.length; i++) {
+          cur = cur ? `${cur} > ${parts[i]}` : parts[i];
+          initialExpanded[cur] = true;
+        }
         setExpanded(initialExpanded);
       } else {
         setExpanded({});
@@ -72,13 +60,14 @@ export default function LocationTreeSelector({
 
   const expandAll = () => {
     const all = {};
-    const traverse = (nodes) => {
+    const traverse = (nodes, parentPath = '') => {
       nodes.forEach(n => {
-        all[n.id] = true;
-        if (n.children) traverse(n.children);
+        const fp = parentPath ? `${parentPath} > ${n.name}` : n.name;
+        all[cleanText(fp).toLowerCase()] = true;
+        if (n.children) traverse(n.children, fp);
       });
     };
-    traverse(effectiveTree);
+    traverse(effectiveTree, '');
     setExpanded(all);
   };
 
@@ -90,18 +79,27 @@ export default function LocationTreeSelector({
   const handleSelectNode = (node, fullPath, hasChildren) => {
     onChange(fullPath);
 
-    const pathIds = getPathNodeIds(effectiveTree, fullPath);
-    const isCurrentlyExpanded = !!expanded[node.id];
+    const normPath = cleanText(fullPath).toLowerCase();
+    const parts = normPath.split(/\s*>\s*/).filter(Boolean);
+    const isCurrentlyExpanded = !!expanded[normPath];
 
     if (hasChildren && isCurrentlyExpanded) {
       // Nếu bấm lại vào node đang mở: chỉ đóng node này, giữ các cấp cha
       const nextExpanded = {};
-      pathIds.slice(0, -1).forEach(id => { nextExpanded[id] = true; });
+      let cur = '';
+      for (let i = 0; i < parts.length - 1; i++) {
+        cur = cur ? `${cur} > ${parts[i]}` : parts[i];
+        nextExpanded[cur] = true;
+      }
       setExpanded(nextExpanded);
     } else {
-      // Mở đúng các node trên đường dẫn được chọn, tất cả các nhánh khác (như Khu B khi chọn Khu A) đều đóng
+      // Mở đúng các node trên đường dẫn được chọn, tất cả các nhánh khác (như Khu B khi chọn Khu A) đều đóng hoàn toàn
       const nextExpanded = {};
-      pathIds.forEach(id => { nextExpanded[id] = true; });
+      let cur = '';
+      for (let i = 0; i < parts.length; i++) {
+        cur = cur ? `${cur} > ${parts[i]}` : parts[i];
+        nextExpanded[cur] = true;
+      }
       setExpanded(nextExpanded);
     }
   };
@@ -127,16 +125,17 @@ export default function LocationTreeSelector({
     const fullPath = parentPath ? `${parentPath} > ${node.name}` : node.name;
     if (!matchesSearch(node, fullPath)) return null;
 
+    const normPath = cleanText(fullPath).toLowerCase();
     const hasChildren = Array.isArray(node.children) && node.children.length > 0;
-    const isExpanded = expanded[node.id] || searchTerm.trim().length > 0;
-    const isSelected = cleanText(value).toLowerCase() === cleanText(fullPath).toLowerCase();
+    const isExpanded = !!expanded[normPath] || searchTerm.trim().length > 0;
+    const isSelected = cleanText(value).toLowerCase() === normPath;
     const assetCount = getNodeAssetCount(fullPath, node.name);
 
     const levelConfig = LEVEL_TYPES[depth] || LEVEL_TYPES[3];
     const IconComponent = levelConfig.icon || DoorOpen;
 
     return (
-      <div key={node.id} style={{ marginLeft: depth > 0 ? 16 : 0, marginTop: 2 }}>
+      <div key={normPath || node.id} style={{ marginLeft: depth > 0 ? 16 : 0, marginTop: 2 }}>
         <div
           onClick={() => handleSelectNode(node, fullPath, hasChildren)}
           style={{

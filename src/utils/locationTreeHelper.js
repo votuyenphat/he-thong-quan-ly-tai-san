@@ -15,23 +15,36 @@ export function isAssetAtLocation(assetLoc, nodeFullPath, nodeName) {
   if (!assetLoc || typeof assetLoc !== 'string') return false;
   const a = cleanText(assetLoc).toLowerCase();
   const f = cleanText(nodeFullPath).toLowerCase();
-  const n = cleanText(nodeName).toLowerCase();
+  if (!a || !f) return false;
 
-  // 1. Direct path containment: e.g. "Cơ sở 1 > Khu A > Tầng 1 > Phòng A1.01" includes "Cơ sở 1 > Khu A"
-  if (a.includes(f)) return true;
+  // 1. So khớp chính xác
+  if (a === f) return true;
 
-  // 2. Check if all individual parts of the target path exist in the asset location
-  const parts = f.split(/\s*>\s*/).map(p => cleanText(p).toLowerCase()).filter(Boolean);
-  if (parts.length > 1) {
-    return parts.every(p => a.includes(p));
+  // 2. So khớp tiền tố phân cấp: e.g. "cơ sở 1 > khu a > tầng 1" bắt đầu bằng "cơ sở 1 > khu a >"
+  if (a.startsWith(`${f} >`)) return true;
+
+  // 3. Tách theo dấu '>' để kiểm tra từng phân cấp chính xác tuyệt đối
+  const aParts = a.split(/\s*>\s*/).map(p => cleanText(p)).filter(Boolean);
+  const fParts = f.split(/\s*>\s*/).map(p => cleanText(p)).filter(Boolean);
+
+  if (fParts.length > 0 && aParts.length >= fParts.length) {
+    let match = true;
+    for (let i = 0; i < fParts.length; i++) {
+      if (aParts[i] !== fParts[i]) {
+        match = false;
+        break;
+      }
+    }
+    if (match) return true;
   }
 
-  // 3. Single part (e.g. "Cơ sở 1" or standalone room name)
-  if (parts.length === 1) {
-    return a.includes(parts[0]);
+  // 4. Fallback: Nếu là cấp phòng cuối cùng, so khớp chính xác tên phân đoạn
+  if (nodeName) {
+    const n = cleanText(nodeName).toLowerCase();
+    if (aParts.includes(n)) return true;
   }
 
-  return a.includes(n);
+  return false;
 }
 
 /**
@@ -65,7 +78,7 @@ export function buildEffectiveLocationTree(locations, assets) {
       if (!existingNode) {
         const depth = Math.min(idx, 3);
         existingNode = {
-          id: `loc-auto-${encodeURIComponent(cleanText(currentPath)).replace(/%/g, '').slice(0, 30)}-${idx}`,
+          id: `loc-${cleanText(currentPath).toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
           name: cleanPart,
           code: cleanPart.slice(0, 10).toUpperCase(),
           type: (LEVEL_TYPES[depth] || LEVEL_TYPES[3]).type,
