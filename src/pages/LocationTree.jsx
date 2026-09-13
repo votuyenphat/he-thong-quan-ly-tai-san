@@ -19,7 +19,7 @@ import {
   MapPin, Building, Layers, DoorOpen,
   ChevronRight, ChevronDown, Boxes,
   Plus, Edit2, Trash2, Save, X, AlertTriangle,
-  RefreshCw, Search, CheckCircle,
+  RefreshCw, Search, CheckCircle, Check,
   Globe, Download, Eye, QrCode
 } from 'lucide-react';
 
@@ -50,7 +50,57 @@ export default function LocationTree() {
   });
 
   const [expanded, setExpanded] = useState({});
-  const toggleExpand = (id) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
+  const toggleExpand = (id, e) => {
+    if (e) e.stopPropagation();
+    setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const expandAll = () => {
+    const all = {};
+    const traverse = (nodes) => {
+      nodes.forEach(n => {
+        all[n.id] = true;
+        if (n.children) traverse(n.children);
+      });
+    };
+    traverse(effectiveTree);
+    setExpanded(all);
+  };
+
+  const collapseAll = () => {
+    setExpanded({});
+  };
+
+  // Khi người dùng bấm vào một node trên cây: chọn node đó và chỉ mở node đó (thu gọn các nhánh cùng cấp)
+  const handleNodeClick = (node, fullPath, depth, hasChildren, levelInfo, siblingIds = []) => {
+    setSelectedLocation({
+      type: 'NODE',
+      id: node.id,
+      name: node.name,
+      fullPath,
+      depth,
+      label: levelInfo.label
+    });
+
+    if (hasChildren) {
+      setExpanded(prev => {
+        const next = { ...prev };
+        const isCurrentlyExpanded = !!prev[node.id];
+        if (isCurrentlyExpanded) {
+          next[node.id] = false;
+        } else {
+          // Accordion: Thu gọn các mục cùng cấp, chỉ mở mục được chọn
+          if (Array.isArray(siblingIds)) {
+            siblingIds.forEach(sibId => {
+              if (sibId !== node.id) next[sibId] = false;
+            });
+          }
+          next[node.id] = true;
+        }
+        return next;
+      });
+    }
+  };
 
   // Search & Filter state for assets within selected location
   const [searchQuery, setSearchQuery] = useState('');
@@ -72,20 +122,6 @@ export default function LocationTree() {
   const effectiveTree = useMemo(() => {
     return buildEffectiveLocationTree(locations, assets);
   }, [locations, assets]);
-
-  // Expand top-level campuses by default if not yet initialized
-  React.useEffect(() => {
-    if (effectiveTree.length > 0 && Object.keys(expanded).length === 0) {
-      const initialExpanded = {};
-      effectiveTree.forEach(c => {
-        initialExpanded[c.id] = true;
-        if (c.children) {
-          c.children.forEach(a => { initialExpanded[a.id] = true; });
-        }
-      });
-      setExpanded(initialExpanded);
-    }
-  }, [effectiveTree]);
 
   // Auto-heal locations state if it contains duplicated nodes from prior sessions
   React.useEffect(() => {
@@ -221,15 +257,21 @@ export default function LocationTree() {
   };
 
   // ---- Recursive Tree Node Renderer ----
-  const renderNode = (node, depth, ancestorPath) => {
+  const renderNode = (node, depth, ancestorPath, siblingIds = []) => {
     const isExpanded = !!expanded[node.id];
-    const isSelected = selectedLocation?.id === node.id;
     const fullPath = ancestorPath ? `${ancestorPath} > ${node.name}` : node.name;
+    const isSelected = selectedLocation?.type === 'NODE' && (
+      selectedLocation?.id === node.id ||
+      (selectedLocation?.fullPath && cleanText(selectedLocation.fullPath).toLowerCase() === cleanText(fullPath).toLowerCase())
+    );
+    const isAncestor = selectedLocation?.type === 'NODE' && selectedLocation?.fullPath &&
+      cleanText(selectedLocation.fullPath).toLowerCase().startsWith(cleanText(fullPath).toLowerCase() + ' >');
 
     const levelInfo = LEVEL_TYPES[depth] || LEVEL_TYPES[3];
     const LevelIcon = levelInfo.icon;
     const isEditing = editingNode?.id === node.id;
     const hasChildren = node.children && node.children.length > 0;
+    const childIds = hasChildren ? node.children.map(c => c.id) : [];
 
     // Count assets present in this node or any child nodes
     const nodeAssetCount = assets.filter(a => isAssetAtLocation(a.locationPath, fullPath, node.name)).length;
@@ -238,14 +280,22 @@ export default function LocationTree() {
       display: 'flex',
       alignItems: 'center',
       gap: 6,
-      padding: '7px 10px',
+      padding: '8px 10px',
       borderRadius: '8px',
       cursor: 'pointer',
       fontSize: `${0.86 - depth * 0.02}rem`,
-      fontWeight: depth === 0 ? 700 : depth === 1 ? 600 : 500,
-      background: isSelected ? '#1e3a8a' : (depth === 0 ? '#f0f9ff' : 'transparent'),
-      color: isSelected ? '#ffffff' : (depth === 0 ? '#1e3a8a' : '#334155'),
-      marginBottom: 2,
+      fontWeight: isSelected ? 700 : (depth === 0 ? 600 : 500),
+      background: isSelected
+        ? 'linear-gradient(135deg, #1e40af, #2563eb)'
+        : (isAncestor ? '#eff6ff' : (depth === 0 ? '#f8fafc' : 'transparent')),
+      color: isSelected
+        ? '#ffffff'
+        : (isAncestor ? '#1d4ed8' : (depth === 0 ? '#0f172a' : '#334155')),
+      border: isSelected
+        ? '1px solid #1d4ed8'
+        : (isAncestor ? '1px solid #bfdbfe' : (depth === 0 ? '1px solid #e2e8f0' : '1px solid transparent')),
+      boxShadow: isSelected ? '0 2px 8px rgba(37, 99, 235, 0.28)' : 'none',
+      marginBottom: 3,
       transition: 'all 0.15s ease'
     };
 
@@ -254,47 +304,33 @@ export default function LocationTree() {
         <div
           style={nodeStyle}
           className="location-tree-node"
-          onClick={() => {
-            setSelectedLocation({
-              type: 'NODE',
-              id: node.id,
-              name: node.name,
-              fullPath,
-              depth,
-              label: levelInfo.label
-            });
-            if (hasChildren && !isExpanded) {
-              toggleExpand(node.id);
-            }
-          }}
+          onClick={() => handleNodeClick(node, fullPath, depth, hasChildren, levelInfo, siblingIds)}
         >
           {/* Expand toggle */}
           {hasChildren ? (
             <span
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleExpand(node.id);
-              }}
+              onClick={(e) => toggleExpand(node.id, e)}
               style={{
                 flexShrink: 0,
-                width: 18,
-                height: 18,
+                width: 20,
+                height: 20,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 borderRadius: 4,
-                color: isSelected ? '#fff' : '#64748b'
+                color: isSelected ? '#ffffff' : (isAncestor ? '#2563eb' : '#64748b'),
+                cursor: 'pointer'
               }}
             >
               {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
             </span>
           ) : (
-            <span style={{ width: 18, flexShrink: 0 }} />
+            <span style={{ width: 20, flexShrink: 0 }} />
           )}
 
           <LevelIcon
             size={15}
-            color={isSelected ? '#ffffff' : levelInfo.color}
+            color={isSelected ? '#ffffff' : (isAncestor ? '#2563eb' : levelInfo.color)}
             style={{ flexShrink: 0 }}
           />
 
@@ -334,10 +370,26 @@ export default function LocationTree() {
               {node.code && (
                 <span style={{
                   fontSize: '0.7rem',
-                  opacity: isSelected ? 0.85 : 0.6,
+                  opacity: isSelected ? 0.9 : 0.6,
                   fontFamily: 'monospace'
                 }}>
                   ({node.code})
+                </span>
+              )}
+              {isSelected && (
+                <span style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 3,
+                  fontSize: '0.68rem',
+                  background: 'rgba(255, 255, 255, 0.25)',
+                  color: '#ffffff',
+                  padding: '2px 6px',
+                  borderRadius: 4,
+                  fontWeight: 700,
+                  marginLeft: 4
+                }}>
+                  <Check size={11} /> Đang chọn
                 </span>
               )}
             </span>
@@ -373,7 +425,7 @@ export default function LocationTree() {
                     cursor: 'pointer',
                     padding: '2px 4px',
                     borderRadius: 4,
-                    color: isSelected ? '#fff' : '#2563eb'
+                    color: isSelected ? '#ffffff' : '#2563eb'
                   }}
                   onClick={() => {
                     setAddingTo({ parentId: node.id, depth });
@@ -392,7 +444,7 @@ export default function LocationTree() {
                   cursor: 'pointer',
                   padding: '2px 4px',
                   borderRadius: 4,
-                  color: isSelected ? '#fff' : '#d97706'
+                  color: isSelected ? '#ffffff' : '#d97706'
                 }}
                 onClick={() => setEditingNode({ id: node.id, name: node.name, code: node.code || '' })}
               >
@@ -460,8 +512,8 @@ export default function LocationTree() {
 
         {/* Children */}
         {hasChildren && isExpanded && (
-          <div style={{ paddingLeft: 14, borderLeft: '1px dashed #cbd5e1', marginLeft: 10 }}>
-            {node.children.map(child => renderNode(child, depth + 1, fullPath))}
+          <div style={{ paddingLeft: 14, borderLeft: '1px dashed #cbd5e1', marginLeft: 10, marginTop: 2 }}>
+            {node.children.map(child => renderNode(child, depth + 1, fullPath, childIds))}
           </div>
         )}
       </div>
@@ -543,6 +595,26 @@ export default function LocationTree() {
             <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#1e3a8a', display: 'flex', alignItems: 'center', gap: 6 }}>
               <Building size={16} color="#2563eb" />
               SƠ ĐỒ ĐỊA BÀN ({effectiveTree.length} cơ sở)
+            </div>
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={expandAll}
+                style={{ fontSize: '0.72rem', height: 26, padding: '0 8px' }}
+                title="Mở rộng tất cả các cấp"
+              >
+                Mở tất cả
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={collapseAll}
+                style={{ fontSize: '0.72rem', height: 26, padding: '0 8px' }}
+                title="Thu gọn tất cả"
+              >
+                Thu gọn
+              </button>
             </div>
           </div>
 
@@ -675,7 +747,10 @@ export default function LocationTree() {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {effectiveTree.map(campus => renderNode(campus, 0, ''))}
+              {(() => {
+                const rootIds = effectiveTree.map(c => c.id);
+                return effectiveTree.map(campus => renderNode(campus, 0, '', rootIds));
+              })()}
             </div>
           )}
         </div>
