@@ -11,15 +11,18 @@ import {
   LogOut,
   Building2,
   Clock,
-  Menu
+  Menu,
+  Database
 } from 'lucide-react';
 import SyncStatusBadge from '../common/SyncStatusBadge';
+import SyncModal from '../common/SyncModal';
 
 export default function Navbar({ setActiveTab, onOpenMobileMenu }) {
   const { currentUser, switchRole, logout } = useAuth();
   const { alerts } = useAssets();
   const [showRoleMenu, setShowRoleMenu] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showSyncModal, setShowSyncModal] = useState(false);
 
   const totalAlerts = 
     alerts.wrongLocation.length + 
@@ -81,8 +84,8 @@ export default function Navbar({ setActiveTab, onOpenMobileMenu }) {
 
       {/* Action Center: Role Switcher, Alerts, User Info */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-        {/* Real-time Multi-Device Sync Indicator */}
-        <SyncStatusBadge />
+        {/* Real-time Multi-Device Sync Indicator (Auto-hidden when synced) */}
+        <SyncStatusBadge onOpenModal={() => setShowSyncModal(true)} />
 
         {/* Quick Role Switcher (4 Roles) */}
         <div style={{ position: 'relative' }}>
@@ -252,13 +255,27 @@ export default function Navbar({ setActiveTab, onOpenMobileMenu }) {
                 <div>Vai trò: <strong>{currentUser?.role}</strong></div>
               </div>
 
+              {/* Truy cập nhanh Trung tâm sao lưu & quản lý CSDL */}
+              <button 
+                onClick={() => {
+                  setShowSyncModal(true);
+                  setShowUserMenu(false);
+                }}
+                className="btn btn-secondary btn-sm" 
+                style={{ width: '100%', marginTop: '12px', justifyContent: 'center', gap: 6, color: '#1e40af', background: '#f8fafc' }}
+                title="Sao lưu file JSON hoặc cấu hình CSDL Cloud"
+              >
+                <Database size={14} color="#2563eb" />
+                Sao lưu & Quản lý CSDL
+              </button>
+
               <button 
                 onClick={() => {
                   logout();
                   setShowUserMenu(false);
                 }}
                 className="btn btn-secondary btn-sm" 
-                style={{ width: '100%', marginTop: '14px', color: '#dc2626' }}
+                style={{ width: '100%', marginTop: '8px', color: '#dc2626' }}
               >
                 <LogOut size={14} />
                 Đăng xuất tài khoản
@@ -267,6 +284,9 @@ export default function Navbar({ setActiveTab, onOpenMobileMenu }) {
           )}
         </div>
       </div>
+
+      {/* Modal Quản lý đồng bộ & Sao lưu dữ liệu */}
+      <SyncModal isOpen={showSyncModal} onClose={() => setShowSyncModal(false)} />
     </header>
   );
 }
