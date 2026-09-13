@@ -71,8 +71,24 @@ export default function LocationTree() {
     setExpanded({});
   };
 
-  // Khi người dùng bấm vào một node trên cây: chọn node đó và chỉ mở node đó (thu gọn các nhánh cùng cấp)
-  const handleNodeClick = (node, fullPath, depth, hasChildren, levelInfo, siblingIds = []) => {
+  // Lấy chính xác danh sách ID các node trên đường dẫn từ gốc đến đích
+  const getPathNodeIds = (tree, targetFullPath) => {
+    const ids = [];
+    if (!targetFullPath) return ids;
+    const parts = cleanText(targetFullPath).split(/\s*>\s*/).map(p => cleanText(p).toLowerCase()).filter(Boolean);
+    let currentNodes = tree;
+    for (let i = 0; i < parts.length; i++) {
+      const p = parts[i];
+      const match = currentNodes.find(n => cleanText(n.name).toLowerCase() === p);
+      if (!match) break;
+      ids.push(match.id);
+      currentNodes = Array.isArray(match.children) ? match.children : [];
+    }
+    return ids;
+  };
+
+  // Khi người dùng bấm vào một node trên cây: chọn node đó và CHỈ MỞ ĐÚNG NHÁNH ĐÓ, đóng tất cả các nhánh khác
+  const handleNodeClick = (node, fullPath, depth, hasChildren, levelInfo) => {
     setSelectedLocation({
       type: 'NODE',
       id: node.id,
@@ -82,23 +98,19 @@ export default function LocationTree() {
       label: levelInfo.label
     });
 
-    if (hasChildren) {
-      setExpanded(prev => {
-        const next = { ...prev };
-        const isCurrentlyExpanded = !!prev[node.id];
-        if (isCurrentlyExpanded) {
-          next[node.id] = false;
-        } else {
-          // Accordion: Thu gọn các mục cùng cấp, chỉ mở mục được chọn
-          if (Array.isArray(siblingIds)) {
-            siblingIds.forEach(sibId => {
-              if (sibId !== node.id) next[sibId] = false;
-            });
-          }
-          next[node.id] = true;
-        }
-        return next;
-      });
+    const pathIds = getPathNodeIds(effectiveTree, fullPath);
+    const isCurrentlyExpanded = !!expanded[node.id];
+
+    if (hasChildren && isCurrentlyExpanded) {
+      // Bấm lại vào node đang mở: chỉ đóng node này, giữ các cấp cha phía trên
+      const nextExpanded = {};
+      pathIds.slice(0, -1).forEach(id => { nextExpanded[id] = true; });
+      setExpanded(nextExpanded);
+    } else {
+      // Mở đúng các node trên đường dẫn, ĐÓNG HẾT các nhánh khác (vd: chọn Cơ sở chính - Khu A thì Khu B chắc chắn đóng)
+      const nextExpanded = {};
+      pathIds.forEach(id => { nextExpanded[id] = true; });
+      setExpanded(nextExpanded);
     }
   };
 
@@ -257,21 +269,18 @@ export default function LocationTree() {
   };
 
   // ---- Recursive Tree Node Renderer ----
-  const renderNode = (node, depth, ancestorPath, siblingIds = []) => {
+  const renderNode = (node, depth, ancestorPath) => {
     const isExpanded = !!expanded[node.id];
     const fullPath = ancestorPath ? `${ancestorPath} > ${node.name}` : node.name;
     const isSelected = selectedLocation?.type === 'NODE' && (
       selectedLocation?.id === node.id ||
       (selectedLocation?.fullPath && cleanText(selectedLocation.fullPath).toLowerCase() === cleanText(fullPath).toLowerCase())
     );
-    const isAncestor = selectedLocation?.type === 'NODE' && selectedLocation?.fullPath &&
-      cleanText(selectedLocation.fullPath).toLowerCase().startsWith(cleanText(fullPath).toLowerCase() + ' >');
 
     const levelInfo = LEVEL_TYPES[depth] || LEVEL_TYPES[3];
     const LevelIcon = levelInfo.icon;
     const isEditing = editingNode?.id === node.id;
     const hasChildren = node.children && node.children.length > 0;
-    const childIds = hasChildren ? node.children.map(c => c.id) : [];
 
     // Count assets present in this node or any child nodes
     const nodeAssetCount = assets.filter(a => isAssetAtLocation(a.locationPath, fullPath, node.name)).length;
@@ -287,13 +296,13 @@ export default function LocationTree() {
       fontWeight: isSelected ? 700 : (depth === 0 ? 600 : 500),
       background: isSelected
         ? 'linear-gradient(135deg, #1e40af, #2563eb)'
-        : (isAncestor ? '#eff6ff' : (depth === 0 ? '#f8fafc' : 'transparent')),
+        : (depth === 0 ? '#f8fafc' : 'transparent'),
       color: isSelected
         ? '#ffffff'
-        : (isAncestor ? '#1d4ed8' : (depth === 0 ? '#0f172a' : '#334155')),
+        : (depth === 0 ? '#0f172a' : '#334155'),
       border: isSelected
         ? '1px solid #1d4ed8'
-        : (isAncestor ? '1px solid #bfdbfe' : (depth === 0 ? '1px solid #e2e8f0' : '1px solid transparent')),
+        : (depth === 0 ? '1px solid #e2e8f0' : '1px solid transparent'),
       boxShadow: isSelected ? '0 2px 8px rgba(37, 99, 235, 0.28)' : 'none',
       marginBottom: 3,
       transition: 'all 0.15s ease'
@@ -304,12 +313,15 @@ export default function LocationTree() {
         <div
           style={nodeStyle}
           className="location-tree-node"
-          onClick={() => handleNodeClick(node, fullPath, depth, hasChildren, levelInfo, siblingIds)}
+          onClick={() => handleNodeClick(node, fullPath, depth, hasChildren, levelInfo)}
         >
           {/* Expand toggle */}
           {hasChildren ? (
             <span
-              onClick={(e) => toggleExpand(node.id, e)}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleNodeClick(node, fullPath, depth, hasChildren, levelInfo);
+              }}
               style={{
                 flexShrink: 0,
                 width: 20,
@@ -318,7 +330,7 @@ export default function LocationTree() {
                 alignItems: 'center',
                 justifyContent: 'center',
                 borderRadius: 4,
-                color: isSelected ? '#ffffff' : (isAncestor ? '#2563eb' : '#64748b'),
+                color: isSelected ? '#ffffff' : '#64748b',
                 cursor: 'pointer'
               }}
             >
@@ -330,7 +342,7 @@ export default function LocationTree() {
 
           <LevelIcon
             size={15}
-            color={isSelected ? '#ffffff' : (isAncestor ? '#2563eb' : levelInfo.color)}
+            color={isSelected ? '#ffffff' : levelInfo.color}
             style={{ flexShrink: 0 }}
           />
 
@@ -513,7 +525,7 @@ export default function LocationTree() {
         {/* Children */}
         {hasChildren && isExpanded && (
           <div style={{ paddingLeft: 14, borderLeft: '1px dashed #cbd5e1', marginLeft: 10, marginTop: 2 }}>
-            {node.children.map(child => renderNode(child, depth + 1, fullPath, childIds))}
+            {node.children.map(child => renderNode(child, depth + 1, fullPath))}
           </div>
         )}
       </div>
@@ -747,10 +759,7 @@ export default function LocationTree() {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {(() => {
-                const rootIds = effectiveTree.map(c => c.id);
-                return effectiveTree.map(campus => renderNode(campus, 0, '', rootIds));
-              })()}
+              {effectiveTree.map(campus => renderNode(campus, 0, ''))}
             </div>
           )}
         </div>

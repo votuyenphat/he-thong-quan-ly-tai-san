@@ -34,22 +34,29 @@ export default function LocationTreeSelector({
     return buildEffectiveLocationTree(locations, assets);
   }, [locations, assets]);
 
+  // Lấy chính xác danh sách ID các node trên đường dẫn từ gốc đến đích
+  const getPathNodeIds = (tree, targetFullPath) => {
+    const ids = [];
+    if (!targetFullPath) return ids;
+    const parts = cleanText(targetFullPath).split(/\s*>\s*/).map(p => cleanText(p).toLowerCase()).filter(Boolean);
+    let currentNodes = tree;
+    for (let i = 0; i < parts.length; i++) {
+      const p = parts[i];
+      const match = currentNodes.find(n => cleanText(n.name).toLowerCase() === p);
+      if (!match) break;
+      ids.push(match.id);
+      currentNodes = Array.isArray(match.children) ? match.children : [];
+    }
+    return ids;
+  };
+
   // Khi mở cây vị trí: chỉ mở rộng đường dẫn đến vị trí đang chọn (nếu có), không bung hết tất cả
   const handleToggleOpen = () => {
     if (!isOpen) {
       if (value && value.trim()) {
+        const pathIds = getPathNodeIds(effectiveTree, value);
         const initialExpanded = {};
-        const parts = cleanText(value).split(/\s*>\s*/).map(p => cleanText(p).toLowerCase()).filter(Boolean);
-        const markPath = (nodes, partIdx) => {
-          if (partIdx >= parts.length) return;
-          const targetPart = parts[partIdx];
-          const matched = nodes.find(n => cleanText(n.name).toLowerCase() === targetPart);
-          if (matched) {
-            initialExpanded[matched.id] = true;
-            if (matched.children) markPath(matched.children, partIdx + 1);
-          }
-        };
-        markPath(effectiveTree, 0);
+        pathIds.forEach(id => { initialExpanded[id] = true; });
         setExpanded(initialExpanded);
       } else {
         setExpanded({});
@@ -58,9 +65,9 @@ export default function LocationTreeSelector({
     setIsOpen(prev => !prev);
   };
 
-  const toggleNode = (id, e) => {
-    e.stopPropagation();
-    setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
+  const toggleNode = (node, fullPath, hasChildren, e) => {
+    if (e) e.stopPropagation();
+    handleSelectNode(node, fullPath, hasChildren);
   };
 
   const expandAll = () => {
@@ -79,27 +86,23 @@ export default function LocationTreeSelector({
     setExpanded({});
   };
 
-  // Khi chọn mục: chọn vị trí và tự động mở mục đó, thu gọn các mục cùng cấp
-  const handleSelectNode = (node, fullPath, hasChildren, siblingIds = []) => {
+  // Khi chọn mục: chọn vị trí và CHỈ MỞ ĐÚNG NHÁNH ĐÓ, đóng tất cả nhánh khác
+  const handleSelectNode = (node, fullPath, hasChildren) => {
     onChange(fullPath);
 
-    if (hasChildren) {
-      setExpanded(prev => {
-        const next = { ...prev };
-        const isCurrentlyExpanded = !!prev[node.id];
-        if (isCurrentlyExpanded) {
-          next[node.id] = false;
-        } else {
-          // Thu gọn các mục cùng cấp
-          if (Array.isArray(siblingIds)) {
-            siblingIds.forEach(sibId => {
-              if (sibId !== node.id) next[sibId] = false;
-            });
-          }
-          next[node.id] = true;
-        }
-        return next;
-      });
+    const pathIds = getPathNodeIds(effectiveTree, fullPath);
+    const isCurrentlyExpanded = !!expanded[node.id];
+
+    if (hasChildren && isCurrentlyExpanded) {
+      // Nếu bấm lại vào node đang mở: chỉ đóng node này, giữ các cấp cha
+      const nextExpanded = {};
+      pathIds.slice(0, -1).forEach(id => { nextExpanded[id] = true; });
+      setExpanded(nextExpanded);
+    } else {
+      // Mở đúng các node trên đường dẫn được chọn, tất cả các nhánh khác (như Khu B khi chọn Khu A) đều đóng
+      const nextExpanded = {};
+      pathIds.forEach(id => { nextExpanded[id] = true; });
+      setExpanded(nextExpanded);
     }
   };
 
@@ -120,16 +123,14 @@ export default function LocationTreeSelector({
     return (assets || []).filter(a => isAssetAtLocation(a.locationPath, fullPath, nodeName)).length;
   };
 
-  const renderTreeNode = (node, parentPath = '', depth = 0, siblingIds = []) => {
+  const renderTreeNode = (node, parentPath = '', depth = 0) => {
     const fullPath = parentPath ? `${parentPath} > ${node.name}` : node.name;
     if (!matchesSearch(node, fullPath)) return null;
 
     const hasChildren = Array.isArray(node.children) && node.children.length > 0;
     const isExpanded = expanded[node.id] || searchTerm.trim().length > 0;
     const isSelected = cleanText(value).toLowerCase() === cleanText(fullPath).toLowerCase();
-    const isAncestor = value && cleanText(value).toLowerCase().startsWith(cleanText(fullPath).toLowerCase() + ' >');
     const assetCount = getNodeAssetCount(fullPath, node.name);
-    const childIds = hasChildren ? node.children.map(c => c.id) : [];
 
     const levelConfig = LEVEL_TYPES[depth] || LEVEL_TYPES[3];
     const IconComponent = levelConfig.icon || DoorOpen;
@@ -137,7 +138,7 @@ export default function LocationTreeSelector({
     return (
       <div key={node.id} style={{ marginLeft: depth > 0 ? 16 : 0, marginTop: 2 }}>
         <div
-          onClick={() => handleSelectNode(node, fullPath, hasChildren, siblingIds)}
+          onClick={() => handleSelectNode(node, fullPath, hasChildren)}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -147,25 +148,25 @@ export default function LocationTreeSelector({
             cursor: 'pointer',
             background: isSelected
               ? 'linear-gradient(135deg, #1e40af, #2563eb)'
-              : (isAncestor ? '#eff6ff' : 'transparent'),
-            color: isSelected ? '#ffffff' : (isAncestor ? '#1d4ed8' : '#1e293b'),
+              : 'transparent',
+            color: isSelected ? '#ffffff' : '#1e293b',
             border: isSelected
               ? '1px solid #1d4ed8'
-              : (isAncestor ? '1px solid #bfdbfe' : '1px solid transparent'),
+              : '1px solid transparent',
             boxShadow: isSelected ? '0 2px 6px rgba(37, 99, 235, 0.25)' : 'none',
             transition: 'all 0.15s ease'
           }}
           onMouseEnter={(e) => {
-            if (!isSelected && !isAncestor) e.currentTarget.style.background = '#f8fafc';
+            if (!isSelected) e.currentTarget.style.background = '#f8fafc';
           }}
           onMouseLeave={(e) => {
-            if (!isSelected && !isAncestor) e.currentTarget.style.background = 'transparent';
+            if (!isSelected) e.currentTarget.style.background = 'transparent';
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, overflow: 'hidden' }}>
             {hasChildren ? (
               <span
-                onClick={(e) => toggleNode(node.id, e)}
+                onClick={(e) => toggleNode(node, fullPath, hasChildren, e)}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -173,7 +174,7 @@ export default function LocationTreeSelector({
                   width: 20,
                   height: 20,
                   borderRadius: 4,
-                  color: isSelected ? '#ffffff' : (isAncestor ? '#2563eb' : '#64748b'),
+                  color: isSelected ? '#ffffff' : '#64748b',
                   cursor: 'pointer'
                 }}
               >
@@ -202,7 +203,7 @@ export default function LocationTreeSelector({
               style={{
                 fontSize: '0.85rem',
                 fontWeight: isSelected ? 700 : (depth === 0 ? 600 : 500),
-                color: isSelected ? '#ffffff' : (isAncestor ? '#1d4ed8' : '#1e293b'),
+                color: isSelected ? '#ffffff' : '#1e293b',
                 whiteSpace: 'nowrap',
                 textOverflow: 'ellipsis',
                 overflow: 'hidden'
@@ -216,8 +217,8 @@ export default function LocationTreeSelector({
                 fontSize: '0.7rem',
                 padding: '1px 6px',
                 borderRadius: '4px',
-                background: isSelected ? 'rgba(255, 255, 255, 0.2)' : (isAncestor ? '#dbeafe' : '#f1f5f9'),
-                color: isSelected ? '#ffffff' : (isAncestor ? '#1e40af' : '#64748b')
+                background: isSelected ? 'rgba(255, 255, 255, 0.2)' : '#f1f5f9',
+                color: isSelected ? '#ffffff' : '#64748b'
               }}
             >
               {levelConfig.label}
@@ -263,7 +264,7 @@ export default function LocationTreeSelector({
 
         {hasChildren && isExpanded && (
           <div style={{ borderLeft: '1px dashed #cbd5e1', marginLeft: 10, paddingLeft: 4, marginTop: 2 }}>
-            {node.children.map(child => renderTreeNode(child, fullPath, depth + 1, childIds))}
+            {node.children.map(child => renderTreeNode(child, fullPath, depth + 1))}
           </div>
         )}
       </div>
@@ -450,10 +451,7 @@ export default function LocationTreeSelector({
                 Chưa có dữ liệu vị trí nào trong hệ thống.
               </div>
             ) : (
-              (() => {
-                const rootIds = effectiveTree.map(c => c.id);
-                return effectiveTree.map(campus => renderTreeNode(campus, '', 0, rootIds));
-              })()
+              effectiveTree.map(campus => renderTreeNode(campus, '', 0))
             )}
           </div>
         </div>
