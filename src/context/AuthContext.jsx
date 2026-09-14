@@ -289,67 +289,6 @@ export function AuthProvider({ children }) {
     return loggedUser;
   };
 
-  // ================= ĐĂNG NHẬP BẰNG GOOGLE OAUTH =================
-  const loginWithGoogleOAuth = async () => {
-    const supabase = getSupabaseClient();
-    if (!supabase) {
-      throw new Error('Chưa cấu hình Supabase Client để đăng nhập Google.');
-    }
-
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: window.location.origin,
-        skipBrowserRedirect: true
-      }
-    });
-
-    if (error) {
-      throw new Error(`Lỗi đăng nhập Google: ${error.message}`);
-    }
-
-    if (data?.url) {
-      const width = 500;
-      const height = 650;
-      const left = window.screen.width / 2 - width / 2;
-      const top = window.screen.height / 2 - height / 2;
-      const popup = window.open(
-        data.url,
-        'GoogleSignIn',
-        `toolbar=no, location=no, directories=no, status=no, menubar=no, scrollbars=no, resizable=no, copyhistory=no, width=${width}, height=${height}, top=${top}, left=${left}`
-      );
-      return { popup, url: data.url };
-    }
-  };
-
-  // ================= ĐĂNG NHẬP NHANH GOOGLE WORKSPACE =================
-  const loginWithGoogleDemo = (email = SUPER_ADMIN_EMAIL, name = 'Võ Tuyền Phát (Super Admin)', avatar = null) => {
-    const cleanEmail = cleanText(email).toLowerCase();
-    const isSA = cleanEmail === SUPER_ADMIN_EMAIL.toLowerCase();
-    const matchedAccount = userAccounts.find(u => u.email?.toLowerCase() === cleanEmail);
-
-    const userObj = {
-      ...(matchedAccount || DEFAULT_SUPER_ADMIN),
-      id: matchedAccount?.id || `usr-google-${Date.now()}`,
-      email: cleanEmail,
-      name: name || matchedAccount?.name || (isSA ? 'Võ Tuyền Phát (Super Admin)' : cleanEmail),
-      avatar: avatar || matchedAccount?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-      role: isSA ? 'SUPER_ADMIN' : (matchedAccount?.role || 'QUAN_LY_PHONG'),
-      isSuperAdmin: isSA,
-      departmentId: isSA ? 'ALL' : (matchedAccount?.departmentId || ''),
-      departmentName: isSA ? 'Toàn trường' : (matchedAccount?.departmentName || ''),
-      permissions: isSA ? { ...SUPER_ADMIN_PERMISSIONS } : (matchedAccount?.permissions || { ...DEFAULT_PERMISSIONS }),
-      status: 'active',
-      forcePasswordChange: false,
-      authProvider: 'google',
-      lastLogin: new Date().toISOString()
-    };
-
-    setCurrentUser(userObj);
-    setIsLoggedIn(true);
-    return userObj;
-  };
-
   // ================= ĐỔI MẬT KHẨU (BẮT BUỘC HOẶC TÙY CHỌN) =================
   const changePassword = async (newPassword) => {
     if (!newPassword || newPassword.length < 6) {
@@ -646,8 +585,6 @@ export function AuthProvider({ children }) {
       userAccounts,
       // Authentication Actions
       loginWithPassword,
-      loginWithGoogleOAuth,
-      loginWithGoogleDemo,
       changePassword,
       logout,
       // Super Admin User Management Actions
