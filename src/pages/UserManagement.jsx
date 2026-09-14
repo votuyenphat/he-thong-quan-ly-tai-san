@@ -1,10 +1,10 @@
-// src/pages/UserManagement.jsx
 import React, { useState } from 'react';
 import { useAuth, SUPER_ADMIN_EMAIL, DEFAULT_PERMISSIONS, SUPER_ADMIN_PERMISSIONS } from '../context/AuthContext';
 import { useAssets } from '../context/AssetContext';
 import { 
   Users, UserPlus, Shield, ShieldCheck, Key, Lock, Unlock, 
-  Trash2, Edit, Check, X, AlertCircle, Building2, Eye, Mail, Phone, CheckSquare
+  Trash2, Edit, Check, X, AlertCircle, Building2, Eye, Mail, Phone, CheckSquare,
+  RefreshCw
 } from 'lucide-react';
 
 export default function UserManagement() {
@@ -16,7 +16,9 @@ export default function UserManagement() {
     updateUserPermissions, 
     resetUserPassword, 
     toggleUserStatus, 
-    deleteUserAccount 
+    deleteUserAccount,
+    syncUserAccountsNow,
+    isSyncingUsers
   } = useAuth();
   const { departments } = useAssets();
 
@@ -199,10 +201,31 @@ export default function UserManagement() {
           </p>
         </div>
 
-        <button className="btn btn-primary" onClick={handleOpenCreate}>
-          <UserPlus size={16} />
-          Cấp tài khoản Quản lý phòng mới
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <button 
+            type="button" 
+            className="btn btn-secondary"
+            onClick={async () => {
+              try {
+                await syncUserAccountsNow();
+                setSuccessMsg('Đã kết nối và đồng bộ tài khoản & phân quyền mới nhất từ Supabase Cloud!');
+              } catch (err) {
+                setErrorMsg('Không thể đồng bộ: ' + err.message);
+              }
+            }}
+            disabled={isSyncingUsers}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.85rem' }}
+            title="Đồng bộ ngay dữ liệu tài khoản từ Supabase Cloud"
+          >
+            <RefreshCw size={15} className={isSyncingUsers ? 'spinning' : ''} />
+            {isSyncingUsers ? 'Đang đồng bộ...' : 'Đồng bộ đám mây'}
+          </button>
+
+          <button className="btn btn-primary" onClick={handleOpenCreate}>
+            <UserPlus size={16} />
+            Cấp tài khoản Quản lý phòng mới
+          </button>
+        </div>
       </div>
 
       {/* Notifications */}
@@ -223,10 +246,20 @@ export default function UserManagement() {
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         <div style={{
           padding: '16px 20px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10
         }}>
-          <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#0f172a' }}>
-            DANH SÁCH TÀI KHOẢN ({userAccounts.length} người dùng)
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#0f172a' }}>
+              DANH SÁCH TÀI KHOẢN ({userAccounts.length} người dùng)
+            </div>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              fontSize: '0.72rem', padding: '2px 8px', borderRadius: '12px',
+              background: '#ecfdf5', color: '#059669', fontWeight: 600, border: '1px solid #a7f3d0'
+            }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', display: 'inline-block' }}></span>
+              Supabase Realtime
+            </span>
           </div>
           <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
             👑 Super Admin có toàn quyền duyệt Điều chuyển / Thanh lý / Thu hồi

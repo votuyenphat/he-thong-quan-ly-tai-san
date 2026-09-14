@@ -64,6 +64,38 @@ VALUES (
 )
 ON CONFLICT (id) DO NOTHING;
 
+-- 4.1 Khởi tạo bản ghi danh sách tài khoản & phân quyền (user_accounts) trong app_database
+INSERT INTO public.app_database (id, data, last_updated)
+VALUES (
+    'user_accounts',
+    jsonb_build_object(
+        'accounts', jsonb_build_array(
+            jsonb_build_object(
+                'id', 'usr-super-admin',
+                'email', 'vphat772@gmail.com',
+                'name', 'Võ Tuyền Phát (Super Admin)',
+                'role', 'SUPER_ADMIN',
+                'isSuperAdmin', true,
+                'departmentId', 'ALL',
+                'departmentName', 'Toàn trường',
+                'permissions', jsonb_build_object(
+                    'asset_create', true, 'asset_edit', true, 'asset_delete', true,
+                    'asset_print_qr', true, 'asset_export', true,
+                    'transfer_propose', true, 'transfer_approve', true,
+                    'recall_propose', true, 'recall_approve', true,
+                    'liquidation_propose', true, 'liquidation_approve', true,
+                    'inventory_scan', true, 'manage_users', true, 'manage_locations', true
+                ),
+                'status', 'active',
+                'forcePasswordChange', false
+            )
+        ),
+        'lastUpdated', (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT
+    ),
+    (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT
+)
+ON CONFLICT (id) DO NOTHING;
+
 -- 5. Tạo các VIEW quan hệ để dễ dàng xem và truy vấn trực tiếp trên Supabase Table Editor
 CREATE OR REPLACE VIEW public.v_assets AS
 SELECT 

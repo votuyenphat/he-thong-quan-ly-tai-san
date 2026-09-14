@@ -117,3 +117,112 @@ export function subscribeToSupabaseRealtime(onDataReceived, onStatusChange) {
     }
   };
 }
+
+/**
+ * Tải danh sách user_accounts từ bảng app_database trên Supabase (id='user_accounts')
+ */
+export async function fetchUserAccountsFromSupabase() {
+  const client = getSupabaseClient();
+  if (!client) return null;
+
+  try {
+    const { data, error } = await client
+      .from('app_database')
+      .select('data, last_updated')
+      .eq('id', 'user_accounts')
+      .maybeSingle();
+
+    if (error) {
+      console.warn('[Supabase] Lỗi tải user_accounts:', error);
+      return null;
+    }
+
+    if (!data || !data.data || !Array.isArray(data.data.accounts)) {
+      return null;
+    }
+
+    return {
+      accounts: data.data.accounts,
+      lastUpdated: data.last_updated || data.data.lastUpdated || Date.now()
+    };
+  } catch (err) {
+    console.warn('[Supabase] fetchUserAccountsFromSupabase ngoại lệ:', err);
+    return null;
+  }
+}
+
+/**
+ * Đẩy danh sách user_accounts lên Supabase (Upsert vào bản ghi id='user_accounts')
+ */
+export async function pushUserAccountsToSupabase(accounts) {
+  const client = getSupabaseClient();
+  if (!client) return { status: 'skipped', reason: 'Supabase client not ready' };
+
+  try {
+    const now = Date.now();
+    const dbRecord = {
+      id: 'user_accounts',
+      data: {
+        accounts: accounts,
+        lastUpdated: now
+      },
+      last_updated: now,
+      updated_at: new Date().toISOString()
+    };
+
+    const { error } = await client
+      .from('app_database')
+      .upsert(dbRecord, { onConflict: 'id' });
+
+    if (error) {
+      console.error('[Supabase] Lỗi lưu user_accounts:', error);
+      throw new Error(`Lỗi cập nhật user_accounts Supabase: ${error.message}`);
+    }
+
+    return { status: 'ok', lastUpdated: now };
+  } catch (err) {
+    console.error('[Supabase] pushUserAccountsToSupabase ngoại lệ:', err);
+    throw err;
+  }
+}
+
+/**
+ * Đăng ký lắng nghe sự kiện Realtime thay đổi tài khoản người dùng
+ */
+export function subscribeToUserAccountsRealtime(onAccountsReceived, onStatusChange) {
+  const client = getSupabaseClient();
+  if (!client) return () => {};
+
+  const channelName = `realtime_user_accounts_${Date.now()}`;
+  const channel = client.channel(channelName);
+
+  channel
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'app_database',
+        filter: 'id=eq.user_accounts'
+      },
+      (payload) => {
+        if (payload.new && payload.new.data && Array.isArray(payload.new.data.accounts)) {
+          onAccountsReceived(payload.new.data.accounts);
+        }
+      }
+    )
+    .subscribe((status) => {
+      if (onStatusChange) {
+        onStatusChange(status);
+      }
+    });
+
+  return () => {
+    try {
+      client.removeChannel(channel);
+    } catch (err) {
+      console.warn('[Supabase Realtime] Lỗi hủy channel user_accounts:', err);
+    }
+  };
+}
+

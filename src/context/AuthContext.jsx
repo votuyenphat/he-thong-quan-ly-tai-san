@@ -1,6 +1,11 @@
 // src/context/AuthContext.jsx
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { getSupabaseClient } from '../services/supabaseClient';
+import { 
+  fetchUserAccountsFromSupabase, 
+  pushUserAccountsToSupabase, 
+  subscribeToUserAccountsRealtime 
+} from '../services/supabaseSync';
 import { cleanText } from '../utils/normalize';
 
 const AuthContext = createContext();
@@ -71,6 +76,10 @@ export function AuthProvider({ children }) {
     return [DEFAULT_SUPER_ADMIN];
   });
 
+  // Trạng thái đồng bộ đám mây
+  const [isSyncingUsers, setIsSyncingUsers] = useState(false);
+  const [lastUserSyncTime, setLastUserSyncTime] = useState(null);
+
   // Người dùng hiện tại
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = localStorage.getItem('qlts_auth_user');
@@ -107,102 +116,150 @@ export function AuthProvider({ children }) {
     localStorage.setItem('qlts_is_logged_in', JSON.stringify(isLoggedIn));
   }, [isLoggedIn]);
 
-  // Lấy hồ sơ từ Supabase user_profiles khi kết nối online
-  const fetchProfilesFromSupabase = useCallback(async () => {
-    const supabase = getSupabaseClient();
-    if (!supabase) return;
+  // Đồng bộ tài khoản người dùng và phân quyền từ Supabase Cloud (app_database: id='user_accounts')
+  const syncUserAccountsWithCloud = useCallback(async () => {
+    setIsSyncingUsers(true);
     try {
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .order('created_at', { ascending: true });
-
-      if (!error && Array.isArray(data) && data.length > 0) {
-        // Hợp nhất dữ liệu hồ sơ từ Supabase vào userAccounts
-        setUserAccounts(prev => {
-          const map = new Map();
-          // Nạp dữ liệu hiện tại
-          prev.forEach(u => map.set(u.email?.toLowerCase(), u));
-          // Nạp dữ liệu từ server Supabase
-          data.forEach(p => {
-            const emailKey = p.email?.toLowerCase();
-            const isSA = emailKey === SUPER_ADMIN_EMAIL.toLowerCase() || p.is_super_admin;
-            map.set(emailKey, {
-              id: p.id || `usr-${Date.now()}`,
-              email: p.email,
-              name: p.full_name || p.email,
-              phone: p.phone || '',
-              departmentId: isSA ? 'ALL' : p.department_id,
-              departmentName: isSA ? 'Toàn trường' : p.department_name,
-              role: isSA ? 'SUPER_ADMIN' : 'QUAN_LY_PHONG',
-              isSuperAdmin: isSA,
-              permissions: isSA ? { ...SUPER_ADMIN_PERMISSIONS } : (p.permissions || { ...DEFAULT_PERMISSIONS }),
-              status: p.is_active ? 'active' : 'locked',
-              forcePasswordChange: Boolean(p.force_password_change),
-              updatedAt: p.updated_at
-            });
-          });
-
-          // Đảm bảo Super Admin luôn có mặt
-          if (!map.has(SUPER_ADMIN_EMAIL.toLowerCase())) {
-            map.set(SUPER_ADMIN_EMAIL.toLowerCase(), DEFAULT_SUPER_ADMIN);
-          }
-
-          return Array.from(map.values());
-        });
+      const remote = await fetchUserAccountsFromSupabase();
+      
+      // Đọc tài khoản hiện có trong localStorage để hợp nhất (tránh mất tài khoản vừa tạo ở máy này)
+      let localAccounts = [];
+      const savedLocal = localStorage.getItem('qlts_user_accounts');
+      if (savedLocal) {
+        try {
+          const parsed = JSON.parse(savedLocal);
+          if (Array.isArray(parsed)) localAccounts = parsed;
+        } catch (e) {}
       }
+
+      if (remote && Array.isArray(remote.accounts) && remote.accounts.length > 0) {
+        const cloudAccounts = remote.accounts;
+        
+        // Kiểm tra xem có tài khoản cục bộ nào chưa có trên đám mây không (ví dụ tài khoản mới tạo trên máy này)
+        const missingOnCloud = localAccounts.filter(localAcc => 
+          localAcc.email && !cloudAccounts.some(ca => ca.email?.toLowerCase() === localAcc.email?.toLowerCase())
+        );
+
+        let mergedAccounts = [...cloudAccounts];
+        let needsPushToCloud = false;
+
+        if (missingOnCloud.length > 0) {
+          console.log('[Cloud Sync] Phát hiện tài khoản cục bộ chưa có trên mây, đang tải lên:', missingOnCloud.map(u => u.email));
+          mergedAccounts = [...cloudAccounts, ...missingOnCloud];
+          needsPushToCloud = true;
+        }
+
+        // Đảm bảo Super Admin luôn có mặt
+        const hasAdmin = mergedAccounts.some(u => u.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase());
+        if (!hasAdmin) {
+          mergedAccounts = [DEFAULT_SUPER_ADMIN, ...mergedAccounts];
+          needsPushToCloud = true;
+        }
+
+        setUserAccounts(mergedAccounts);
+        localStorage.setItem('qlts_user_accounts', JSON.stringify(mergedAccounts));
+
+        if (needsPushToCloud) {
+          await pushUserAccountsToSupabase(mergedAccounts);
+        }
+      } else {
+        // Chưa có dữ liệu trên cloud: nếu local đã có tài khoản, đẩy toàn bộ local lên cloud
+        if (localAccounts.length > 0) {
+          const hasAdmin = localAccounts.some(u => u.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase());
+          const toUpload = hasAdmin ? localAccounts : [DEFAULT_SUPER_ADMIN, ...localAccounts];
+          await pushUserAccountsToSupabase(toUpload);
+          setUserAccounts(toUpload);
+        }
+      }
+
+      setLastUserSyncTime(Date.now());
     } catch (err) {
-      console.warn('[Auth] Không thể tải danh sách profiles từ Supabase:', err);
+      console.warn('[Cloud Sync] Lỗi đồng bộ tài khoản từ Supabase:', err);
+    } finally {
+      setIsSyncingUsers(false);
     }
   }, []);
 
-  // Lắng nghe sự kiện xác thực từ Supabase Auth Realtime
+  // Lắng nghe Supabase Realtime & tải dữ liệu đám mây khi khởi động
   useEffect(() => {
-    fetchProfilesFromSupabase();
+    // 1. Tải dữ liệu ban đầu
+    syncUserAccountsWithCloud();
 
-    const supabase = getSupabaseClient();
-    if (!supabase) return;
+    // 2. Lắng nghe thay đổi tức thì từ Supabase Realtime (khi máy khác thêm/sửa/xóa tài khoản)
+    const unsubscribeRealtime = subscribeToUserAccountsRealtime((remoteAccounts) => {
+      if (Array.isArray(remoteAccounts) && remoteAccounts.length > 0) {
+        console.log('[Realtime] Nhận cập nhật danh sách tài khoản từ máy khác:', remoteAccounts.length, 'người dùng');
+        const hasAdmin = remoteAccounts.some(u => u.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase());
+        const finalized = hasAdmin ? remoteAccounts : [DEFAULT_SUPER_ADMIN, ...remoteAccounts];
+        
+        setUserAccounts(finalized);
+        localStorage.setItem('qlts_user_accounts', JSON.stringify(finalized));
+        setLastUserSyncTime(Date.now());
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user) {
-        const email = session.user.email?.toLowerCase();
-        const isSA = email === SUPER_ADMIN_EMAIL.toLowerCase();
-
-        // Tìm hồ sơ tương ứng
-        setUserAccounts(currentList => {
-          const existing = currentList.find(u => u.email?.toLowerCase() === email);
-          const profile = existing || {
-            id: session.user.id,
-            email: session.user.email,
-            name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Người dùng',
-            avatar: session.user.user_metadata?.avatar_url || null,
-            role: isSA ? 'SUPER_ADMIN' : 'QUAN_LY_PHONG',
-            isSuperAdmin: isSA,
-            departmentId: isSA ? 'ALL' : '',
-            departmentName: isSA ? 'Toàn trường' : 'Chưa gán phòng ban',
-            permissions: isSA ? { ...SUPER_ADMIN_PERMISSIONS } : { ...DEFAULT_PERMISSIONS },
-            status: 'active',
-            forcePasswordChange: false,
-            lastLogin: new Date().toISOString()
-          };
-
-          setCurrentUser(profile);
-          setIsLoggedIn(true);
-
-          if (!existing) {
-            return [...currentList, profile];
+        // Cập nhật người dùng hiện tại nếu thông tin hoặc quyền hạn bị thay đổi từ máy khác
+        setCurrentUser(curr => {
+          if (!curr) return curr;
+          const updated = finalized.find(u => u.email?.toLowerCase() === curr.email?.toLowerCase());
+          if (updated) {
+            return {
+              ...curr,
+              ...updated,
+              // Giữ lại session hiện tại
+              lastLogin: curr.lastLogin
+            };
           }
-          return currentList;
+          return curr;
         });
-      } else if (event === 'SIGNED_OUT') {
-        // Không tự động đăng xuất nếu đang dùng session offline
       }
     });
 
+    // 3. Lắng nghe session Supabase Auth nếu có
+    const supabase = getSupabaseClient();
+    let authListener = null;
+    if (supabase) {
+      const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (session?.user) {
+          const email = session.user.email?.toLowerCase();
+          const isSA = email === SUPER_ADMIN_EMAIL.toLowerCase();
+
+          setUserAccounts(currentList => {
+            const existing = currentList.find(u => u.email?.toLowerCase() === email);
+            const profile = existing || {
+              id: session.user.id,
+              email: session.user.email,
+              name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Người dùng',
+              avatar: session.user.user_metadata?.avatar_url || null,
+              role: isSA ? 'SUPER_ADMIN' : 'QUAN_LY_PHONG',
+              isSuperAdmin: isSA,
+              departmentId: isSA ? 'ALL' : '',
+              departmentName: isSA ? 'Toàn trường' : 'Chưa gán phòng ban',
+              permissions: isSA ? { ...SUPER_ADMIN_PERMISSIONS } : { ...DEFAULT_PERMISSIONS },
+              status: 'active',
+              forcePasswordChange: false,
+              lastLogin: new Date().toISOString()
+            };
+
+            setCurrentUser(profile);
+            setIsLoggedIn(true);
+
+            if (!existing) {
+              const nextList = [...currentList, profile];
+              pushUserAccountsToSupabase(nextList).catch(console.warn);
+              return nextList;
+            }
+            return currentList;
+          });
+        }
+      });
+      authListener = data;
+    }
+
     return () => {
+      unsubscribeRealtime();
       authListener?.subscription?.unsubscribe();
     };
-  }, [fetchProfilesFromSupabase]);
+  }, [syncUserAccountsWithCloud]);
+
 
   // ================= ĐĂNG NHẬP BẰNG EMAIL & MẬT KHẨU =================
   const loginWithPassword = async (email, password) => {
@@ -234,7 +291,23 @@ export function AuthProvider({ children }) {
 
     // 2. Tìm tài khoản trong danh mục người dùng hệ thống (Hoạt động cả khi offline)
     const isSA = cleanEmail === SUPER_ADMIN_EMAIL.toLowerCase();
-    const matchedAccount = userAccounts.find(u => u.email?.toLowerCase() === cleanEmail);
+    let currentAccounts = userAccounts;
+    let matchedAccount = currentAccounts.find(u => u.email?.toLowerCase() === cleanEmail);
+
+    // Nếu không tìm thấy cục bộ và không phải Super Admin, thử kéo dữ liệu mới nhất từ Supabase Cloud
+    if (!matchedAccount && !isSA) {
+      try {
+        const remote = await fetchUserAccountsFromSupabase();
+        if (remote?.accounts && Array.isArray(remote.accounts) && remote.accounts.length > 0) {
+          currentAccounts = remote.accounts;
+          setUserAccounts(currentAccounts);
+          localStorage.setItem('qlts_user_accounts', JSON.stringify(currentAccounts));
+          matchedAccount = currentAccounts.find(u => u.email?.toLowerCase() === cleanEmail);
+        }
+      } catch (err) {
+        console.warn('[Auth] Lỗi fetch tài khoản từ cloud khi login:', err);
+      }
+    }
 
     // Xác thực tài khoản Super Admin mặc định
     if (isSA) {
@@ -318,11 +391,21 @@ export function AuthProvider({ children }) {
 
     setCurrentUser(updatedUser);
 
-    setUserAccounts(prev => prev.map(u => 
+    const updatedAccounts = userAccounts.map(u => 
       u.email?.toLowerCase() === currentUser?.email?.toLowerCase()
-        ? { ...u, password: newPassword, forcePasswordChange: false }
+        ? { ...u, password: newPassword, forcePasswordChange: false, updatedAt: new Date().toISOString() }
         : u
-    ));
+    );
+
+    setUserAccounts(updatedAccounts);
+    localStorage.setItem('qlts_user_accounts', JSON.stringify(updatedAccounts));
+
+    // Đẩy đồng bộ lên Supabase Cloud
+    try {
+      await pushUserAccountsToSupabase(updatedAccounts);
+    } catch (e) {
+      console.warn('[Supabase] Lỗi đồng bộ mật khẩu lên cloud:', e);
+    }
 
     // Cập nhật bảng user_profiles trên Supabase nếu có
     if (supabase && currentUser?.id) {
@@ -332,7 +415,7 @@ export function AuthProvider({ children }) {
           .update({ force_password_change: false, updated_at: new Date().toISOString() })
           .eq('email', currentUser.email);
       } catch (e) {
-        console.warn('[Supabase] Không thể update force_password_change:', e);
+        console.warn('[Supabase] Không thể update user_profiles force_password_change:', e);
       }
     }
 
@@ -387,14 +470,27 @@ export function AuthProvider({ children }) {
       initialPassword,
       status: 'active',
       forcePasswordChange: true, // Bắt buộc đổi mật khẩu lần đầu
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
 
-    // Đăng ký tài khoản trên Supabase Auth nếu online
+    const nextAccounts = [newAccount, ...userAccounts];
+    setUserAccounts(nextAccounts);
+    localStorage.setItem('qlts_user_accounts', JSON.stringify(nextAccounts));
+
+    // Đẩy ngay lập tức lên Supabase Cloud app_database (id='user_accounts')
+    try {
+      await pushUserAccountsToSupabase(nextAccounts);
+      console.log('[Supabase Cloud] Đã đồng bộ tài khoản mới lên đám mây thành công:', cleanEmail);
+    } catch (cloudErr) {
+      console.error('[Supabase Cloud] Lỗi đồng bộ tài khoản mới lên đám mây:', cloudErr);
+    }
+
+    // Đăng ký tài khoản trên Supabase Auth và user_profiles nếu online
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
-        const { data: authData, error: authError } = await supabase.auth.signUp({
+        const { data: authData } = await supabase.auth.signUp({
           email: cleanEmail,
           password: initialPassword,
           options: {
@@ -404,7 +500,7 @@ export function AuthProvider({ children }) {
 
         const authId = authData?.user?.id;
 
-        // Lưu vào bảng public.user_profiles
+        // Lưu vào bảng public.user_profiles nếu bảng này tồn tại
         await supabase.from('user_profiles').upsert({
           auth_id: authId,
           email: cleanEmail,
@@ -419,27 +515,42 @@ export function AuthProvider({ children }) {
           force_password_change: true
         });
       } catch (err) {
-        console.warn('[Supabase] Không thể tạo tài khoản Supabase Auth (tiếp tục lưu cục bộ):', err);
+        console.warn('[Supabase] Dự phòng user_profiles (tiếp tục qua app_database):', err.message);
       }
     }
 
-    setUserAccounts(prev => [newAccount, ...prev]);
     return newAccount;
   };
 
   // 2. Cập nhật quyền hạn cho tài khoản
   const updateUserPermissions = async (userId, newPermissions) => {
-    setUserAccounts(prev => prev.map(u => {
+    let affectedEmail = null;
+    const nextAccounts = userAccounts.map(u => {
       if (u.id === userId || u.email === userId) {
-        const updated = { ...u, permissions: { ...newPermissions } };
-        // Nếu là tài khoản đang đăng nhập, cập nhật ngay lập tức
-        if (currentUser?.email === u.email) {
-          setCurrentUser(curr => ({ ...curr, permissions: { ...newPermissions } }));
-        }
-        return updated;
+        affectedEmail = u.email;
+        return { 
+          ...u, 
+          permissions: { ...newPermissions },
+          updatedAt: new Date().toISOString()
+        };
       }
       return u;
-    }));
+    });
+
+    setUserAccounts(nextAccounts);
+    localStorage.setItem('qlts_user_accounts', JSON.stringify(nextAccounts));
+
+    // Nếu là tài khoản đang đăng nhập, cập nhật ngay lập tức
+    if (currentUser && (currentUser.id === userId || currentUser.email === userId || currentUser.email === affectedEmail)) {
+      setCurrentUser(curr => ({ ...curr, permissions: { ...newPermissions } }));
+    }
+
+    // Đồng bộ tức thì lên Supabase Cloud
+    try {
+      await pushUserAccountsToSupabase(nextAccounts);
+    } catch (e) {
+      console.warn('[Supabase Cloud] Lỗi cập nhật quyền lên cloud:', e);
+    }
 
     const supabase = getSupabaseClient();
     if (supabase) {
@@ -449,24 +560,35 @@ export function AuthProvider({ children }) {
           .update({ permissions: newPermissions, updated_at: new Date().toISOString() })
           .or(`id.eq.${userId},email.eq.${userId}`);
       } catch (e) {
-        console.warn('[Supabase] Không thể cập nhật quyền online:', e);
+        console.warn('[Supabase] Không thể cập nhật quyền user_profiles online:', e.message);
       }
     }
   };
 
   // 3. Đặt lại mật khẩu tài khoản
   const resetUserPassword = async (userId, newPassword = 'Truong@2026') => {
-    setUserAccounts(prev => prev.map(u => {
+    const nextAccounts = userAccounts.map(u => {
       if (u.id === userId || u.email === userId) {
         return {
           ...u,
           password: newPassword,
           initialPassword: newPassword,
-          forcePasswordChange: true
+          forcePasswordChange: true,
+          updatedAt: new Date().toISOString()
         };
       }
       return u;
-    }));
+    });
+
+    setUserAccounts(nextAccounts);
+    localStorage.setItem('qlts_user_accounts', JSON.stringify(nextAccounts));
+
+    // Đồng bộ tức thì lên Supabase Cloud
+    try {
+      await pushUserAccountsToSupabase(nextAccounts);
+    } catch (e) {
+      console.warn('[Supabase Cloud] Lỗi reset mật khẩu lên cloud:', e);
+    }
 
     const supabase = getSupabaseClient();
     if (supabase) {
@@ -476,7 +598,7 @@ export function AuthProvider({ children }) {
           .update({ force_password_change: true, updated_at: new Date().toISOString() })
           .or(`id.eq.${userId},email.eq.${userId}`);
       } catch (e) {
-        console.warn('[Supabase] Không thể reset mật khẩu online:', e);
+        console.warn('[Supabase] Không thể reset mật khẩu user_profiles online:', e.message);
       }
     }
   };
@@ -484,16 +606,26 @@ export function AuthProvider({ children }) {
   // 4. Khóa / Mở khóa tài khoản
   const toggleUserStatus = async (userId) => {
     let newStatus = 'active';
-    setUserAccounts(prev => prev.map(u => {
+    const nextAccounts = userAccounts.map(u => {
       if (u.id === userId || u.email === userId) {
         if (u.isSuperAdmin || u.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()) {
           throw new Error('Không thể khóa tài khoản Super Admin tối cao!');
         }
         newStatus = u.status === 'active' ? 'locked' : 'active';
-        return { ...u, status: newStatus };
+        return { ...u, status: newStatus, updatedAt: new Date().toISOString() };
       }
       return u;
-    }));
+    });
+
+    setUserAccounts(nextAccounts);
+    localStorage.setItem('qlts_user_accounts', JSON.stringify(nextAccounts));
+
+    // Đồng bộ tức thì lên Supabase Cloud
+    try {
+      await pushUserAccountsToSupabase(nextAccounts);
+    } catch (e) {
+      console.warn('[Supabase Cloud] Lỗi cập nhật trạng thái user lên cloud:', e);
+    }
 
     const supabase = getSupabaseClient();
     if (supabase) {
@@ -503,7 +635,7 @@ export function AuthProvider({ children }) {
           .update({ is_active: newStatus === 'active', updated_at: new Date().toISOString() })
           .or(`id.eq.${userId},email.eq.${userId}`);
       } catch (e) {
-        console.warn('[Supabase] Không thể cập nhật trạng thái online:', e);
+        console.warn('[Supabase] Không thể cập nhật trạng thái user_profiles online:', e.message);
       }
     }
   };
@@ -515,7 +647,16 @@ export function AuthProvider({ children }) {
       throw new Error('Không thể xóa tài khoản Super Admin tối cao!');
     }
 
-    setUserAccounts(prev => prev.filter(u => u.id !== userId && u.email !== userId));
+    const nextAccounts = userAccounts.filter(u => u.id !== userId && u.email !== userId);
+    setUserAccounts(nextAccounts);
+    localStorage.setItem('qlts_user_accounts', JSON.stringify(nextAccounts));
+
+    // Đồng bộ tức thì lên Supabase Cloud
+    try {
+      await pushUserAccountsToSupabase(nextAccounts);
+    } catch (e) {
+      console.warn('[Supabase Cloud] Lỗi xóa user khỏi cloud:', e);
+    }
 
     const supabase = getSupabaseClient();
     if (supabase) {
@@ -525,7 +666,7 @@ export function AuthProvider({ children }) {
           .delete()
           .or(`id.eq.${userId},email.eq.${userId}`);
       } catch (e) {
-        console.warn('[Supabase] Không thể xóa user profile online:', e);
+        console.warn('[Supabase] Không thể xóa user_profiles online:', e.message);
       }
     }
   };
@@ -583,6 +724,10 @@ export function AuthProvider({ children }) {
       isSuperAdmin,
       permissions,
       userAccounts,
+      isSyncingUsers,
+      lastUserSyncTime,
+      // Synchronization Actions
+      syncUserAccountsNow: syncUserAccountsWithCloud,
       // Authentication Actions
       loginWithPassword,
       changePassword,
@@ -592,8 +737,7 @@ export function AuthProvider({ children }) {
       updateUserPermissions,
       resetUserPassword,
       toggleUserStatus,
-      deleteUserAccount,
-      fetchProfilesFromSupabase
+      deleteUserAccount
     }}>
       {children}
     </AuthContext.Provider>
