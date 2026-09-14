@@ -241,7 +241,7 @@ export function AuthProvider({ children }) {
       // Mật khẩu mặc định hoặc mật khẩu đã lưu
       const storedPass = localStorage.getItem('qlts_admin_password') || 'Admin@123456';
       if (!supabaseLoggedIn && cleanPass !== storedPass && cleanPass !== 'Admin@123456') {
-        throw new Error('Mật khẩu Super Admin không chính xác. Mật khẩu khởi tạo là Admin@123456');
+        throw new Error('Mật khẩu không chính xác. Vui lòng kiểm tra lại!');
       }
 
       const adminUser = {
