@@ -163,7 +163,31 @@ export function getDepartmentAssetCount(dept, assets = []) {
  */
 export function isKhoaDepartment(name = '') {
   const l = cleanText(name).toLowerCase();
-  return l.startsWith('khoa') || /\bkhoa\b/.test(l);
+  if (!l) return false;
+
+  // Nếu tên bắt đầu bằng "Phòng", "Ban", "Trung tâm", "Văn phòng", "Tổ"
+  // => Chắc chắn là Khối Phòng / Ban chức năng (ví dụ: "Phòng Khoa học Công nghệ", "Phòng KHCN", "Ban Quản trị")
+  if (/^(phòng|phong|ban|trung tâm|trung tam|văn phòng|van phong|tổ|to)\b/i.test(l)) {
+    return false;
+  }
+
+  // Nếu bắt đầu bằng "Khoa học" (nhưng không phải "Khoa Khoa học...")
+  // => Từ "Khoa học" mang nghĩa khoa học / công nghệ (science), không phải đơn vị "Khoa" (faculty)
+  if (/^khoa\s+học\b/i.test(l) || /^khoa\s+hoc\b/i.test(l)) {
+    return false;
+  }
+
+  // Bắt đầu bằng đơn vị "Khoa" (ví dụ: "Khoa CNTT", "Khoa Điện", "Khoa Khoa học Ứng dụng")
+  if (/^khoa\b/i.test(l)) {
+    return true;
+  }
+
+  // Nếu có từ "Khoa" đứng riêng nhưng KHÔNG phải là "Khoa học"
+  if (/\bkhoa\b/i.test(l) && !/\bkhoa\s+học\b/i.test(l) && !/\bkhoa\s+hoc\b/i.test(l)) {
+    return true;
+  }
+
+  return false;
 }
 
 /**
