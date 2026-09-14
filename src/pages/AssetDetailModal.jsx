@@ -49,16 +49,18 @@ export default function AssetDetailModal({ isOpen, onClose, asset, onOpenQR }) {
       footer={
         <>
           <button className="btn btn-secondary" onClick={onClose}>Đóng</button>
-          <button 
-            className="btn btn-primary" 
-            onClick={() => {
-              onClose();
-              onOpenQR(asset);
-            }}
-          >
-            <QrCode size={16} />
-            In Tem Mã QR
-          </button>
+          {permissions.canPrintQR && (
+            <button 
+              className="btn btn-primary" 
+              onClick={() => {
+                onClose();
+                onOpenQR(asset);
+              }}
+            >
+              <QrCode size={16} />
+              In Tem Mã QR
+            </button>
+          )}
         </>
       }
     >

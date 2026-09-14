@@ -14,6 +14,7 @@ import {
   FileSpreadsheet,
   History,
   ShieldAlert,
+  Users,
   X
 } from 'lucide-react';
 
@@ -45,10 +46,10 @@ export default function Sidebar({ activeTab, setActiveTab, mobileOpen, onClose }
       title: 'QUẢN LÝ TÀI SẢN',
       items: [
         { id: 'assets', label: 'Danh mục Tài sản', icon: Boxes, visible: true },
-        { id: 'inbound', label: 'Nhập tài sản mới', icon: PlusCircle, visible: permissions.canManageAssets },
+        { id: 'inbound', label: 'Nhập tài sản mới', icon: PlusCircle, visible: permissions.canCreateAsset },
         { id: 'transfer', label: 'Điều chuyển tài sản', icon: ArrowLeftRight, visible: true },
-        { id: 'recall', label: 'Thu hồi tài sản', icon: RotateCcw, visible: permissions.canManageAssets },
-        { id: 'liquidation', label: 'Thanh lý tài sản', icon: Trash2, visible: true }
+        { id: 'recall', label: 'Thu hồi tài sản', icon: RotateCcw, visible: permissions.isSuperAdmin || permissions.canProposeRecall },
+        { id: 'liquidation', label: 'Thanh lý tài sản', icon: Trash2, visible: permissions.isSuperAdmin || permissions.canProposeLiquidation }
       ]
     },
     {
@@ -62,7 +63,8 @@ export default function Sidebar({ activeTab, setActiveTab, mobileOpen, onClose }
       title: 'BÁO CÁO & HỆ THỐNG',
       items: [
         { id: 'reports', label: 'Báo cáo (Excel / PDF)', icon: FileSpreadsheet, visible: true },
-        { id: 'audit', label: 'Nhật ký Hệ thống', icon: History, visible: permissions.isAdmin || permissions.isStorekeeper }
+        { id: 'users', label: 'Tài khoản & Phân quyền', icon: Users, visible: permissions.isSuperAdmin },
+        { id: 'audit', label: 'Nhật ký Hệ thống', icon: History, visible: permissions.isSuperAdmin }
       ]
     }
   ];

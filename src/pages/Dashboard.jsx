@@ -1,6 +1,7 @@
 // src/pages/Dashboard.jsx
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useAssets } from '../context/AssetContext';
+import { useAuth } from '../context/AuthContext';
 import { formatVND } from '../utils/formatters';
 import {
   Chart as ChartJS,
@@ -51,20 +52,33 @@ ChartJS.register(
 
 export default function Dashboard({ setActiveTab }) {
   const { assets, departments, alerts } = useAssets();
+  const { currentUser, permissions } = useAuth();
 
-  // 1. KPI Counts (chuẩn hóa trạng thái và tình trạng)
-  const totalAssetCodes = assets.length;
-  const totalAssets = assets.reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
-  const inUseCount = assets.filter(a => canonicalStatus(a.status) === 'Đang sử dụng').reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
-  const inStockCount = assets.filter(a => canonicalStatus(a.status) === 'Trong kho').reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
-  const pendingLiquidationCount = assets.filter(a => canonicalStatus(a.status) === 'Chờ thanh lý').reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
-  const liquidatedCount = assets.filter(a => canonicalStatus(a.status) === 'Đã thanh lý').reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
+  // Dữ liệu tài sản theo phạm vi tài khoản (Super Admin: toàn trường, QL phòng: phòng mình)
+  const scopedAssets = useMemo(() => {
+    if (permissions?.isSuperAdmin) return assets;
+    const userDeptId = currentUser?.departmentId;
+    const userDeptName = currentUser?.departmentName || currentUser?.department;
+    return assets.filter(a => {
+      const matchDeptId = userDeptId && a.departmentId && cleanText(a.departmentId).toLowerCase() === cleanText(userDeptId).toLowerCase();
+      const matchDeptName = userDeptName && a.departmentName && cleanText(a.departmentName).toLowerCase() === cleanText(userDeptName).toLowerCase();
+      return matchDeptId || matchDeptName;
+    });
+  }, [assets, permissions?.isSuperAdmin, currentUser]);
 
-  const totalValue = assets.reduce((sum, a) => sum + ((Number(a.cost) || 0) * (Number(a.quantity) || 1)), 0);
+  // 1. KPI Counts (chuẩn hóa trạng thái và tình trạng theo scopedAssets)
+  const totalAssetCodes = scopedAssets.length;
+  const totalAssets = scopedAssets.reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
+  const inUseCount = scopedAssets.filter(a => canonicalStatus(a.status) === 'Đang sử dụng').reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
+  const inStockCount = scopedAssets.filter(a => canonicalStatus(a.status) === 'Trong kho').reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
+  const pendingLiquidationCount = scopedAssets.filter(a => canonicalStatus(a.status) === 'Chờ thanh lý').reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
+  const liquidatedCount = scopedAssets.filter(a => canonicalStatus(a.status) === 'Đã thanh lý').reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
+
+  const totalValue = scopedAssets.reduce((sum, a) => sum + ((Number(a.cost) || 0) * (Number(a.quantity) || 1)), 0);
 
   // 2. Thống kê theo phòng (so sánh chuẩn hóa)
   const deptStats = departments.map(dept => {
-    const deptAssets = assets.filter(a =>
+    const deptAssets = scopedAssets.filter(a =>
       cleanText(a.departmentId).toLowerCase() === cleanText(dept.id).toLowerCase() ||
       cleanText(a.departmentName).toLowerCase() === cleanText(dept.name).toLowerCase()
     );
@@ -92,7 +106,7 @@ export default function Dashboard({ setActiveTab }) {
 
   // 4. Biểu đồ 2: Tài sản theo loại (Doughnut)
   const typeMap = {};
-  assets.forEach(a => {
+  scopedAssets.forEach(a => {
     const t = cleanText(a.type) || 'Khác';
     typeMap[t] = (typeMap[t] || 0) + (Number(a.quantity) || 1);
   });
@@ -101,7 +115,10 @@ export default function Dashboard({ setActiveTab }) {
     datasets: [
       {
         data: Object.values(typeMap),
-        backgroundColor: ['#2563eb', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#64748b'],
+        backgroundColor: [
+          '#1e3a8a', '#2563eb', '#3b82f6', '#60a5fa', '#93c5fd',
+          '#0d9488', '#059669', '#d97706', '#dc2626', '#8b5cf6'
+        ],
         borderWidth: 2,
         borderColor: '#ffffff'
       }
@@ -110,7 +127,7 @@ export default function Dashboard({ setActiveTab }) {
 
   // 5. Biểu đồ 3: Tài sản theo tình trạng (Polar Area)
   const conditionMap = { 'Tốt': 0, 'Khá': 0, 'Hỏng nhẹ': 0, 'Hỏng nặng': 0, 'Không sử dụng được': 0 };
-  assets.forEach(a => {
+  scopedAssets.forEach(a => {
     const qty = Number(a.quantity) || 1;
     const cond = canonicalCondition(a.condition);
     if (conditionMap[cond] !== undefined) {
@@ -155,7 +172,7 @@ export default function Dashboard({ setActiveTab }) {
     'Sắp hết (<= 1 năm)': 0,
     'Đã hết hạn SD': 0
   };
-  assets.forEach(a => {
+  scopedAssets.forEach(a => {
     if (a.purchaseDate && a.lifespanYears) {
       const expYear = new Date(a.purchaseDate).getFullYear() + a.lifespanYears;
       const diff = expYear - currentYear;
@@ -195,7 +212,7 @@ export default function Dashboard({ setActiveTab }) {
             Bảng Điều Khiển Tổng Quan
           </h2>
           <p className="page-subtitle">
-            Theo dõi thời gian thực tình hình tài sản, hiện trạng sử dụng và phân bổ toàn đơn vị
+            Theo dõi thời gian thực tình hình tài sản, hiện trạng sử dụng và phân bổ {permissions?.isSuperAdmin ? 'toàn đơn vị' : (currentUser?.departmentName || currentUser?.department || 'phòng ban')}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>

@@ -29,12 +29,36 @@ export default function AssetLiquidation() {
   const [selectedLq, setSelectedLq] = useState(null);
   const [selectedPrintLq, setSelectedPrintLq] = useState(null);
 
-  // Eligible assets for liquidation proposal
+  // Eligible assets for liquidation proposal (scoped by department for QL phòng)
   const eligibleAssets = useMemo(() => {
-    return assets.filter(a => 
+    let list = assets.filter(a => 
       canonicalStatus(a.status) !== 'Đã thanh lý' && canonicalStatus(a.status) !== 'Chờ thanh lý'
     );
-  }, [assets]);
+    if (!permissions?.isSuperAdmin) {
+      const userDeptId = currentUser?.departmentId;
+      const userDeptName = currentUser?.departmentName || currentUser?.department;
+      list = list.filter(a => {
+        const matchDeptId = userDeptId && a.departmentId && cleanText(a.departmentId).toLowerCase() === cleanText(userDeptId).toLowerCase();
+        const matchDeptName = userDeptName && a.departmentName && cleanText(a.departmentName).toLowerCase() === cleanText(userDeptName).toLowerCase();
+        return matchDeptId || matchDeptName;
+      });
+    }
+    return list;
+  }, [assets, permissions?.isSuperAdmin, currentUser]);
+
+  // Lọc danh sách hồ sơ thanh lý: Super Admin thấy toàn bộ, QL phòng chỉ thấy hồ sơ thuộc phòng mình
+  const visibleLiquidations = useMemo(() => {
+    if (permissions?.isSuperAdmin) return liquidations;
+    const userDeptId = currentUser?.departmentId;
+    const userDeptName = currentUser?.departmentName || currentUser?.department;
+    return liquidations.filter(lq => {
+      const asset = assets.find(a => a.id === lq.assetId || a.code === lq.assetCode);
+      if (!asset) return true;
+      const matchDeptId = userDeptId && asset.departmentId && cleanText(asset.departmentId).toLowerCase() === cleanText(userDeptId).toLowerCase();
+      const matchDeptName = userDeptName && asset.departmentName && cleanText(asset.departmentName).toLowerCase() === cleanText(userDeptName).toLowerCase();
+      return matchDeptId || matchDeptName;
+    });
+  }, [liquidations, assets, permissions?.isSuperAdmin, currentUser]);
 
   // Search & smart suggestions state for selecting asset
   const [selectedAssetId, setSelectedAssetId] = useState('');
@@ -150,10 +174,12 @@ export default function AssetLiquidation() {
           </p>
         </div>
 
-        <button className="btn btn-primary" onClick={handleOpenCreateModal}>
-          <Plus size={16} />
-          Lập Tờ Trình Đề Nghị Thanh Lý
-        </button>
+        {permissions?.canProposeLiquidation && (
+          <button className="btn btn-primary" onClick={handleOpenCreateModal}>
+            <Plus size={16} />
+            Lập Tờ Trình Đề Nghị Thanh Lý
+          </button>
+        )}
       </div>
 
       {/* Visual Workflow Stepper */}
@@ -206,7 +232,7 @@ export default function AssetLiquidation() {
       <div className="card">
         <h3 className="card-title">
           <span>Danh Sách Hồ Sơ & Phiếu Thanh Lý</span>
-          <span style={{ fontSize: '0.85rem', color: '#64748b' }}>Tổng số: {liquidations.length} hồ sơ</span>
+          <span style={{ fontSize: '0.85rem', color: '#64748b' }}>Tổng số: {visibleLiquidations.length} hồ sơ</span>
         </h3>
 
         <div className="table-container">
@@ -224,7 +250,14 @@ export default function AssetLiquidation() {
               </tr>
             </thead>
             <tbody>
-              {liquidations.map((lq) => (
+              {visibleLiquidations.length === 0 ? (
+                <tr>
+                  <td colSpan="8" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                    Chưa có hồ sơ thanh lý nào.
+                  </td>
+                </tr>
+              ) : (
+                visibleLiquidations.map((lq) => (
                 <tr key={lq.id}>
                   <td>
                     <span style={{ fontWeight: 700, color: '#1e3a8a', fontFamily: 'monospace' }}>
@@ -283,7 +316,7 @@ export default function AssetLiquidation() {
                         </button>
                       )}
 
-                      {lq.status === 'Đã duyệt' && permissions.canManageAssets && (
+                      {lq.status === 'Đã duyệt' && permissions.canApproveLiquidation && (
                         <button
                           className="btn btn-success btn-sm"
                           onClick={() => handleOpenComplete(lq)}
@@ -303,7 +336,8 @@ export default function AssetLiquidation() {
                     </div>
                   </td>
                 </tr>
-              ))}
+                ))
+              )}
             </tbody>
           </table>
         </div>

@@ -22,6 +22,8 @@ import AlertsPage from './pages/AlertsPage';
 import ReportsPage from './pages/ReportsPage';
 import AuditLogsPage from './pages/AuditLogsPage';
 import CategoryConfig from './pages/CategoryConfig';
+import UserManagement from './pages/UserManagement';
+import ForcePasswordChangeModal from './components/common/ForcePasswordChangeModal';
 
 function MainApplication() {
   const { isLoggedIn } = useAuth();
@@ -65,6 +67,8 @@ function MainApplication() {
         return <ReportsPage />;
       case 'audit':
         return <AuditLogsPage />;
+      case 'users':
+        return <UserManagement />;
       default:
         return <Dashboard setActiveTab={setActiveTab} />;
     }
@@ -85,6 +89,7 @@ function MainApplication() {
           onOpenMobileMenu={() => setMobileOpen(true)}
         />
         {renderActivePage()}
+        <ForcePasswordChangeModal />
       </div>
 
       {/* Mobile Bottom Navigation Bar */}

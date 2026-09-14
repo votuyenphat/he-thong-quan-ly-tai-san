@@ -44,9 +44,19 @@ export default function AssetTransfer() {
   const targetAsset = assets.find(a => a.id === selectedAssetId);
   const targetToDept = departments.find(d => d.id === toDeptId);
 
-  // Gợi ý thông minh danh sách tài sản (loại trừ tài sản đã thanh lý)
+  // Gợi ý thông minh danh sách tài sản (loại trừ tài sản đã thanh lý và giới hạn theo phòng nếu là QL phòng)
   const filteredAssetSuggestions = useMemo(() => {
-    const available = assets.filter(a => canonicalStatus(a.status) !== 'Đã thanh lý');
+    let available = assets.filter(a => canonicalStatus(a.status) !== 'Đã thanh lý');
+    if (!permissions?.isSuperAdmin) {
+      const userDeptId = currentUser?.departmentId;
+      const userDeptName = currentUser?.departmentName || currentUser?.department;
+      available = available.filter(a => {
+        const matchDeptId = userDeptId && a.departmentId && cleanText(a.departmentId).toLowerCase() === cleanText(userDeptId).toLowerCase();
+        const matchDeptName = userDeptName && a.departmentName && cleanText(a.departmentName).toLowerCase() === cleanText(userDeptName).toLowerCase();
+        return matchDeptId || matchDeptName;
+      });
+    }
+
     if (!assetSearchTerm.trim()) {
       return available.slice(0, 8);
     }
@@ -59,7 +69,21 @@ export default function AssetTransfer() {
       cleanText(a.locationPath).toLowerCase().includes(q) ||
       cleanText(a.brand).toLowerCase().includes(q)
     ).slice(0, 10);
-  }, [assets, assetSearchTerm]);
+  }, [assets, assetSearchTerm, permissions?.isSuperAdmin, currentUser]);
+
+  // Lọc danh sách phiếu: Super Admin thấy tất cả; Quản lý phòng thấy phiếu gửi đi VÀ gửi đến phòng mình
+  const visibleTransfers = useMemo(() => {
+    if (permissions?.isSuperAdmin) return transfers;
+    const userDeptId = currentUser?.departmentId;
+    const userDeptName = currentUser?.departmentName || currentUser?.department;
+    return transfers.filter(t => {
+      const matchFromId = userDeptId && t.fromDepartmentId && cleanText(t.fromDepartmentId).toLowerCase() === cleanText(userDeptId).toLowerCase();
+      const matchToId = userDeptId && t.toDepartmentId && cleanText(t.toDepartmentId).toLowerCase() === cleanText(userDeptId).toLowerCase();
+      const matchFromName = userDeptName && t.fromDepartmentName && cleanText(t.fromDepartmentName).toLowerCase() === cleanText(userDeptName).toLowerCase();
+      const matchToName = userDeptName && t.toDepartmentName && cleanText(t.toDepartmentName).toLowerCase() === cleanText(userDeptName).toLowerCase();
+      return matchFromId || matchToId || matchFromName || matchToName;
+    });
+  }, [transfers, permissions?.isSuperAdmin, currentUser]);
 
   const handleOpenCreateModal = () => {
     setSelectedAssetId('');
@@ -145,10 +169,12 @@ export default function AssetTransfer() {
           </p>
         </div>
 
-        <button className="btn btn-primary" onClick={handleOpenCreateModal}>
-          <Plus size={16} />
-          Tạo Phiếu Điều Chuyển Mới
-        </button>
+        {permissions?.canProposeTransfer && (
+          <button className="btn btn-primary" onClick={handleOpenCreateModal}>
+            <Plus size={16} />
+            Tạo Phiếu Điều Chuyển Mới
+          </button>
+        )}
       </div>
 
       {/* Transfers List Table */}
@@ -156,7 +182,7 @@ export default function AssetTransfer() {
         <h3 className="card-title">
           <span>Danh Sách Các Phiếu Điều Chuyển</span>
           <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 500 }}>
-            Tổng số: {transfers.length} phiếu
+            Tổng số: {visibleTransfers.length} phiếu
           </span>
         </h3>
 
@@ -175,26 +201,46 @@ export default function AssetTransfer() {
               </tr>
             </thead>
             <tbody>
-              {transfers.length === 0 ? (
+              {visibleTransfers.length === 0 ? (
                 <tr>
                   <td colSpan="8" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
-                    Chưa có phiếu điều chuyển nào được lập.
+                    Chưa có phiếu điều chuyển nào phù hợp.
                   </td>
                 </tr>
               ) : (
-                transfers.map((t) => (
-                  <tr key={t.id}>
-                    <td>
-                      <span style={{ fontWeight: 700, color: '#1e3a8a', fontFamily: 'monospace' }}>
-                        {t.code}
-                      </span>
-                    </td>
-                    <td>
-                      <div style={{ fontWeight: 600, color: '#0f172a' }}>{t.assetName}</div>
-                      <div style={{ fontSize: '0.75rem', color: '#64748b', fontFamily: 'monospace' }}>
-                        Mã TS: {t.assetCode}
-                      </div>
-                    </td>
+                visibleTransfers.map((t) => {
+                  const isIncoming = !permissions?.isSuperAdmin && (
+                    (currentUser?.departmentId && t.toDepartmentId && cleanText(t.toDepartmentId).toLowerCase() === cleanText(currentUser.departmentId).toLowerCase()) ||
+                    (cleanText(t.toDepartmentName).toLowerCase() === cleanText(currentUser?.departmentName || currentUser?.department).toLowerCase())
+                  );
+                  return (
+                    <tr key={t.id} style={{ background: isIncoming ? '#f0fdf4' : 'transparent' }}>
+                      <td>
+                        <span style={{ fontWeight: 700, color: '#1e3a8a', fontFamily: 'monospace' }}>
+                          {t.code}
+                        </span>
+                        {isIncoming && (
+                          <span style={{
+                            display: 'block',
+                            background: '#dbeafe',
+                            color: '#1e40af',
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            padding: '1px 6px',
+                            borderRadius: 4,
+                            marginTop: 4,
+                            width: 'fit-content'
+                          }}>
+                            📥 Chuyển đến phòng
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        <div style={{ fontWeight: 600, color: '#0f172a' }}>{t.assetName}</div>
+                        <div style={{ fontSize: '0.75rem', color: '#64748b', fontFamily: 'monospace' }}>
+                          Mã TS: {t.assetCode}
+                        </div>
+                      </td>
                     <td>
                       <div style={{ fontWeight: 500, fontSize: '0.825rem', color: '#475569' }}>
                         {t.fromDepartmentName}
@@ -268,8 +314,9 @@ export default function AssetTransfer() {
                       </div>
                     </td>
                   </tr>
-                ))
-              )}
+                );
+              })
+            )}
             </tbody>
           </table>
         </div>

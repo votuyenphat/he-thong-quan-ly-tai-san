@@ -139,12 +139,15 @@ export default function AssetList({ setActiveTab }) {
   // Smart Multi-criteria Filtering
   const filteredAssets = useMemo(() => {
     return assets.filter(a => {
-      // Role-based restrictions
-      if (currentUser?.role.includes('Trưởng phòng') && a.departmentName !== currentUser.department) {
-        return false;
-      }
-      if (currentUser?.role.includes('Người dùng') && !a.currentUser?.includes(currentUser.name) && !a.responsiblePerson?.includes(currentUser.name)) {
-        return false;
+      // Role-based restrictions: Super Admin xem toàn bộ, Quản lý phòng chỉ xem tài sản phòng mình
+      if (!permissions?.isSuperAdmin) {
+        const userDeptId = currentUser?.departmentId;
+        const userDeptName = currentUser?.departmentName || currentUser?.department;
+        const matchDeptId = userDeptId && a.departmentId && cleanText(a.departmentId).toLowerCase() === cleanText(userDeptId).toLowerCase();
+        const matchDeptName = userDeptName && a.departmentName && cleanText(a.departmentName).toLowerCase() === cleanText(userDeptName).toLowerCase();
+        if (!matchDeptId && !matchDeptName) {
+          return false;
+        }
       }
 
       // Quick filter chips — chuẩn hóa trạng thái & tình trạng
@@ -327,7 +330,9 @@ export default function AssetList({ setActiveTab }) {
         <div>
           <h2 className="page-title">
             <Boxes size={26} color="#1e3a8a" />
-            Danh Mục Tài Sản Toàn Đơn Vị
+            {permissions?.isSuperAdmin 
+              ? 'Danh Mục Tài Sản Toàn Đơn Vị' 
+              : `Danh Mục Tài Sản - ${currentUser?.departmentName || currentUser?.department || 'Phòng ban'}`}
           </h2>
           <p className="page-subtitle">
             Hệ thống quản lý định danh số, tra cứu vị trí, người sử dụng và in tem mã QR
@@ -335,11 +340,13 @@ export default function AssetList({ setActiveTab }) {
         </div>
 
         <div style={{ display: 'flex', gap: 10 }}>
-          <button className="btn btn-secondary" onClick={handleExportExcel}>
-            <FileSpreadsheet size={16} />
-            Xuất Excel ({filteredAssets.length} mã)
-          </button>
-          {permissions.canManageAssets && (
+          {permissions?.canExportExcel && (
+            <button className="btn btn-secondary" onClick={handleExportExcel}>
+              <FileSpreadsheet size={16} />
+              Xuất Excel ({filteredAssets.length} mã)
+            </button>
+          )}
+          {permissions?.canCreateAsset && (
             <button className="btn btn-primary" onClick={() => setActiveTab('inbound')}>
               <Plus size={16} />
               Nhập tài sản mới
@@ -452,9 +459,10 @@ export default function AssetList({ setActiveTab }) {
           <div>
             <select
               className="form-select"
-              value={selectedDept}
+              value={!permissions?.isSuperAdmin ? (currentUser?.departmentName || currentUser?.department || 'ALL') : selectedDept}
               onChange={(e) => setSelectedDept(e.target.value)}
-              disabled={currentUser?.role.includes('Trưởng phòng')}
+              disabled={!permissions?.isSuperAdmin}
+              title={!permissions?.isSuperAdmin ? `Phạm vi cố định theo đơn vị: ${currentUser?.departmentName || currentUser?.department}` : 'Chọn đơn vị lọc tài sản'}
             >
               <option value="ALL">-- Tất cả Phòng/Ban --</option>
               {departments.map(d => (
@@ -685,16 +693,18 @@ export default function AssetList({ setActiveTab }) {
                         </button>
 
                         {/* In tem QR */}
-                        <button
-                          className="btn-icon"
-                          title="In tem mã QR"
-                          onClick={() => handleOpenQR(asset)}
-                        >
-                          <QrCode size={15} color="#2563eb" />
-                        </button>
+                        {permissions?.canPrintQR && (
+                          <button
+                            className="btn-icon"
+                            title="In tem mã QR"
+                            onClick={() => handleOpenQR(asset)}
+                          >
+                            <QrCode size={15} color="#2563eb" />
+                          </button>
+                        )}
 
                         {/* Edit */}
-                        {permissions.canManageAssets && (
+                        {permissions?.canEditAsset && (
                           <button
                             className="btn-icon"
                             title="Chỉnh sửa thông tin tài sản"
@@ -706,7 +716,7 @@ export default function AssetList({ setActiveTab }) {
                         )}
 
                         {/* Liquidation quick action */}
-                        {permissions.canManageAssets && canonicalStatus(asset.status) !== 'Đã thanh lý' && canonicalStatus(asset.status) !== 'Chờ thanh lý' && (
+                        {permissions?.canProposeLiquidation && canonicalStatus(asset.status) !== 'Đã thanh lý' && canonicalStatus(asset.status) !== 'Chờ thanh lý' && (
                           <button
                             className="btn-icon"
                             title="Lập đề nghị thanh lý"
@@ -718,7 +728,7 @@ export default function AssetList({ setActiveTab }) {
                         )}
 
                         {/* Delete */}
-                        {permissions.isAdmin && (
+                        {permissions?.canDeleteAsset && (
                           <button
                             className="btn-icon"
                             title="Xóa tài sản"

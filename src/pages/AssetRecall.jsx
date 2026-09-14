@@ -38,13 +38,35 @@ export default function AssetRecall() {
 
   const targetAsset = assets.find(a => a.id === selectedAssetId);
 
-  // Danh sách tài sản có thể thu hồi (đang sử dụng hoặc đang điều chuyển, không tính đã thanh lý hoặc đã trong kho)
+  // Danh sách tài sản có thể thu hồi (đang sử dụng hoặc đang điều chuyển, không tính đã thanh lý hoặc đã trong kho; giới hạn theo phòng cho QL phòng)
   const recallableAssets = useMemo(() => {
-    return assets.filter(a => {
+    let list = assets.filter(a => {
       const st = canonicalStatus(a.status);
       return st !== 'Đã thanh lý' && st !== 'Trong kho' && st !== 'Đã thu hồi';
     });
-  }, [assets]);
+    if (!permissions?.isSuperAdmin) {
+      const userDeptId = currentUser?.departmentId;
+      const userDeptName = currentUser?.departmentName || currentUser?.department;
+      list = list.filter(a => {
+        const matchDeptId = userDeptId && a.departmentId && cleanText(a.departmentId).toLowerCase() === cleanText(userDeptId).toLowerCase();
+        const matchDeptName = userDeptName && a.departmentName && cleanText(a.departmentName).toLowerCase() === cleanText(userDeptName).toLowerCase();
+        return matchDeptId || matchDeptName;
+      });
+    }
+    return list;
+  }, [assets, permissions?.isSuperAdmin, currentUser]);
+
+  // Lọc danh sách biên bản thu hồi: Super Admin thấy toàn bộ, QL phòng chỉ thấy phiếu của phòng mình
+  const visibleRecalls = useMemo(() => {
+    if (permissions?.isSuperAdmin) return recalls;
+    const userDeptId = currentUser?.departmentId;
+    const userDeptName = currentUser?.departmentName || currentUser?.department;
+    return recalls.filter(r => {
+      const matchDeptId = userDeptId && (r.departmentId || r.fromDepartmentId) && cleanText(r.departmentId || r.fromDepartmentId).toLowerCase() === cleanText(userDeptId).toLowerCase();
+      const matchDeptName = userDeptName && (r.departmentName || r.fromDepartmentName) && cleanText(r.departmentName || r.fromDepartmentName).toLowerCase() === cleanText(userDeptName).toLowerCase();
+      return matchDeptId || matchDeptName;
+    });
+  }, [recalls, permissions?.isSuperAdmin, currentUser]);
 
   // Gợi ý thông minh tìm kiếm tài sản thu hồi
   const filteredAssetSuggestions = useMemo(() => {
@@ -132,10 +154,12 @@ export default function AssetRecall() {
           </p>
         </div>
 
-        <button className="btn btn-primary" onClick={handleOpenCreateModal}>
-          <Plus size={16} />
-          Lập Phiếu Thu Hồi
-        </button>
+        {permissions?.canProposeRecall && (
+          <button className="btn btn-primary" onClick={handleOpenCreateModal}>
+            <Plus size={16} />
+            Lập Phiếu Thu Hồi
+          </button>
+        )}
       </div>
 
       {/* Recalls List Table */}
@@ -143,7 +167,7 @@ export default function AssetRecall() {
         <h3 className="card-title">
           <span>Danh Sách Các Biên Bản Thu Hồi Tài Sản</span>
           <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 500 }}>
-            Tổng số: {recalls.length} phiếu
+            Tổng số: {visibleRecalls.length} phiếu
           </span>
         </h3>
 
@@ -162,14 +186,14 @@ export default function AssetRecall() {
               </tr>
             </thead>
             <tbody>
-              {recalls.length === 0 ? (
+              {visibleRecalls.length === 0 ? (
                 <tr>
                   <td colSpan="8" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
                     Chưa có phiếu thu hồi nào trong hệ thống.
                   </td>
                 </tr>
               ) : (
-                recalls.map((r) => (
+                visibleRecalls.map((r) => (
                   <tr key={r.id}>
                     <td>
                       <span style={{ fontWeight: 700, color: '#1e3a8a', fontFamily: 'monospace' }}>
@@ -214,18 +238,20 @@ export default function AssetRecall() {
                         >
                           <Printer size={14} /> In
                         </button>
-                        <button
-                          className="btn btn-danger btn-sm"
-                          onClick={() => handleDeleteRecall(r)}
-                          title="Xóa biên bản thu hồi (hoàn trả tài sản về vị trí cũ)"
-                          style={{
-                            background: '#fee2e2',
-                            color: '#dc2626',
-                            borderColor: '#fecdd3'
-                          }}
-                        >
-                          <Trash2 size={13} /> Xóa
-                        </button>
+                        {permissions?.canDeleteAsset && (
+                          <button
+                            className="btn btn-danger btn-sm"
+                            onClick={() => handleDeleteRecall(r)}
+                            title="Xóa biên bản thu hồi (hoàn trả tài sản về vị trí cũ)"
+                            style={{
+                              background: '#fee2e2',
+                              color: '#dc2626',
+                              borderColor: '#fecdd3'
+                            }}
+                          >
+                            <Trash2 size={13} /> Xóa
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
