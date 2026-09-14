@@ -1,6 +1,6 @@
 // src/pages/DepartmentTree.jsx
 // Sơ Đồ Tổ Chức & Cây Phòng / Ban với CRUD
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAssets } from '../context/AssetContext';
 import { useAuth } from '../context/AuthContext';
 import { formatVND } from '../utils/formatters';
@@ -9,8 +9,22 @@ import { cleanText } from '../utils/normalize';
 import {
   FolderTree, Building2, Users, MapPin, Phone, Boxes,
   ChevronRight, Shield, UserCheck, Plus, Edit2, Trash2,
-  Save, X, AlertTriangle
+  Save, X, AlertTriangle,
+  ChevronLeft, ChevronsLeft, ChevronsRight, Search
 } from 'lucide-react';
+
+function getPageNumbers(current, total) {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  if (current <= 4) {
+    return [1, 2, 3, 4, 5, '...', total];
+  }
+  if (current >= total - 3) {
+    return [1, '...', total - 4, total - 3, total - 2, total - 1, total];
+  }
+  return [1, '...', current - 1, current, current + 1, '...', total];
+}
 
 const EMPTY_DEPT = {
   code: '',
@@ -28,11 +42,46 @@ export default function DepartmentTree() {
 
   const [selectedDeptId, setSelectedDeptId] = useState(departments[0]?.id || '');
   const activeDept = departments.find(d => d.id === selectedDeptId) || departments[0];
-  const deptAssets = assets.filter(a =>
-    (activeDept?.id && cleanText(a.departmentId).toLowerCase() === cleanText(activeDept.id).toLowerCase()) ||
-    (activeDept?.name && cleanText(a.departmentName).toLowerCase() === cleanText(activeDept.name).toLowerCase())
-  );
-  const deptTotalValue = deptAssets.reduce((sum, a) => sum + (Number(a.cost) || 0), 0);
+  const deptAssets = useMemo(() => {
+    return assets.filter(a =>
+      (activeDept?.id && cleanText(a.departmentId).toLowerCase() === cleanText(activeDept.id).toLowerCase()) ||
+      (activeDept?.name && cleanText(a.departmentName).toLowerCase() === cleanText(activeDept.name).toLowerCase())
+    );
+  }, [assets, activeDept]);
+  const deptTotalValue = useMemo(() => {
+    return deptAssets.reduce((sum, a) => sum + (Number(a.cost) || 0), 0);
+  }, [deptAssets]);
+
+  // Tìm kiếm & phân trang danh mục tài sản phòng ban (mặc định 50 tài sản/trang)
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+
+  const filteredDeptAssets = useMemo(() => {
+    if (!searchQuery.trim()) return deptAssets;
+    const q = cleanText(searchQuery).toLowerCase().trim();
+    return deptAssets.filter(a =>
+      a.code?.toLowerCase().includes(q) ||
+      a.name?.toLowerCase().includes(q) ||
+      a.currentUser?.toLowerCase().includes(q) ||
+      a.brand?.toLowerCase().includes(q) ||
+      a.locationPath?.toLowerCase().includes(q) ||
+      a.type?.toLowerCase().includes(q)
+    );
+  }, [deptAssets, searchQuery]);
+
+  // Tự động chuyển về trang 1 khi thay đổi phòng ban, từ khóa tìm kiếm hoặc pageSize
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedDeptId, searchQuery, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredDeptAssets.length / pageSize));
+  const validCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const startIndex = (validCurrentPage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, filteredDeptAssets.length);
+  const paginatedAssets = useMemo(() => {
+    return filteredDeptAssets.slice(startIndex, startIndex + pageSize);
+  }, [filteredDeptAssets, startIndex, pageSize]);
 
   // State: Add / Edit
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -259,47 +308,87 @@ export default function DepartmentTree() {
               {/* Assets Table */}
               <div className="card">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
-                  <h4 className="card-title" style={{ margin: 0 }}>
-                    <span>Danh Sách Tài Sản Trực Thuộc ({deptAssets.length} tài sản)</span>
-                  </h4>
-                  {permissions?.canManageAssets && deptAssets.length > 0 && (
-                    <button
-                      type="button"
-                      className="btn"
-                      style={{
-                        background: '#fef2f2',
-                        color: '#dc2626',
-                        border: '1px solid #fecaca',
-                        fontSize: '0.8rem',
-                        fontWeight: 600,
-                        padding: '6px 14px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        cursor: 'pointer',
-                        borderRadius: 6,
-                        transition: 'all 0.15s ease'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = '#fee2e2';
-                        e.currentTarget.style.borderColor = '#f87171';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = '#fef2f2';
-                        e.currentTarget.style.borderColor = '#fecaca';
-                      }}
-                      onClick={() => setIsDeleteDeptAssetsOpen(true)}
-                      title={`Xóa toàn bộ ${deptAssets.length} tài sản đang phân bổ cho phòng ${activeDept.name}`}
-                    >
-                      <Trash2 size={15} />
-                      Xóa toàn bộ tài sản phòng này ({deptAssets.length})
-                    </button>
-                  )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Boxes size={18} color="#1e3a8a" />
+                    <h4 className="card-title" style={{ margin: 0 }}>
+                      <span>Danh Sách Tài Sản Trực Thuộc ({filteredDeptAssets.length}{filteredDeptAssets.length !== deptAssets.length ? ` / ${deptAssets.length}` : ''} tài sản)</span>
+                    </h4>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    {/* Search box */}
+                    <div style={{ position: 'relative' }}>
+                      <Search size={14} style={{ position: 'absolute', left: 10, top: 9, color: '#94a3b8' }} />
+                      <input
+                        type="text"
+                        className="form-input"
+                        style={{ height: 32, paddingLeft: 30, fontSize: '0.8rem', width: 200 }}
+                        placeholder="Tìm mã, tên, người dùng..."
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                      />
+                      {searchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setSearchQuery('')}
+                          style={{
+                            position: 'absolute',
+                            right: 8,
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            border: 'none',
+                            background: 'transparent',
+                            color: '#94a3b8',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <X size={13} />
+                        </button>
+                      )}
+                    </div>
+
+                    {permissions?.canManageAssets && deptAssets.length > 0 && (
+                      <button
+                        type="button"
+                        className="btn"
+                        style={{
+                          background: '#fef2f2',
+                          color: '#dc2626',
+                          border: '1px solid #fecaca',
+                          fontSize: '0.8rem',
+                          fontWeight: 600,
+                          height: 32,
+                          padding: '0 12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          cursor: 'pointer',
+                          borderRadius: 6,
+                          transition: 'all 0.15s ease'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = '#fee2e2';
+                          e.currentTarget.style.borderColor = '#f87171';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = '#fef2f2';
+                          e.currentTarget.style.borderColor = '#fecaca';
+                        }}
+                        onClick={() => setIsDeleteDeptAssetsOpen(true)}
+                        title={`Xóa toàn bộ ${deptAssets.length} tài sản đang phân bổ cho phòng ${activeDept.name}`}
+                      >
+                        <Trash2 size={14} />
+                        Xóa toàn bộ tài sản phòng ({deptAssets.length})
+                      </button>
+                    )}
+                  </div>
                 </div>
+
                 <div className="table-container">
                   <table className="table">
                     <thead>
                       <tr>
+                        <th style={{ width: 40, textAlign: 'center' }}>STT</th>
                         <th>Mã tài sản</th>
                         <th>Tên tài sản</th>
                         <th>Vị trí chi tiết</th>
@@ -310,15 +399,20 @@ export default function DepartmentTree() {
                       </tr>
                     </thead>
                     <tbody>
-                      {deptAssets.length === 0 ? (
+                      {filteredDeptAssets.length === 0 ? (
                         <tr>
-                          <td colSpan="7" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
-                            Chưa có tài sản nào được phân bổ cho phòng ban này.
+                          <td colSpan="8" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                            {deptAssets.length === 0
+                              ? 'Chưa có tài sản nào được phân bổ cho phòng ban này.'
+                              : 'Không có tài sản nào phù hợp với tìm kiếm.'}
                           </td>
                         </tr>
                       ) : (
-                        deptAssets.map((asset) => (
+                        paginatedAssets.map((asset, idx) => (
                           <tr key={asset.id}>
+                            <td style={{ textAlign: 'center', fontSize: '0.8rem', color: '#94a3b8' }}>
+                              {startIndex + idx + 1}
+                            </td>
                             <td>
                               <span style={{ fontWeight: 700, color: '#1e3a8a', fontFamily: 'monospace' }}>
                                 {asset.code}
@@ -339,6 +433,130 @@ export default function DepartmentTree() {
                     </tbody>
                   </table>
                 </div>
+
+                {/* Pagination Bar */}
+                {filteredDeptAssets.length > 0 && (
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: 16,
+                    marginTop: 16,
+                    padding: '12px 18px',
+                    background: '#ffffff',
+                    borderRadius: 8,
+                    border: '1px solid #e2e8f0',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                  }}>
+                    {/* Left: Info & Page size selector */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontSize: '0.85rem', color: '#475569', flexWrap: 'wrap' }}>
+                      <span>
+                        Hiển thị <strong>{startIndex + 1}</strong> - <strong>{endIndex}</strong> trên <strong>{filteredDeptAssets.length}</strong> tài sản
+                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ color: '#64748b' }}>Số lượng/trang:</span>
+                        <select
+                          className="form-select"
+                          style={{ padding: '4px 8px', fontSize: '0.825rem', width: 'auto', height: 'auto' }}
+                          value={pageSize}
+                          onChange={(e) => setPageSize(Number(e.target.value))}
+                        >
+                          <option value={25}>25 / trang</option>
+                          <option value={50}>50 / trang (Mặc định)</option>
+                          <option value={100}>100 / trang</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Right: Pagination buttons */}
+                    {totalPages > 1 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        {/* First page */}
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          style={{ padding: '6px 8px', opacity: validCurrentPage === 1 ? 0.4 : 1, cursor: validCurrentPage === 1 ? 'not-allowed' : 'pointer' }}
+                          disabled={validCurrentPage === 1}
+                          onClick={() => setCurrentPage(1)}
+                          title="Trang đầu"
+                        >
+                          <ChevronsLeft size={16} />
+                        </button>
+
+                        {/* Prev page */}
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          style={{ padding: '6px 8px', opacity: validCurrentPage === 1 ? 0.4 : 1, cursor: validCurrentPage === 1 ? 'not-allowed' : 'pointer' }}
+                          disabled={validCurrentPage === 1}
+                          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                          title="Trang trước"
+                        >
+                          <ChevronLeft size={16} />
+                        </button>
+
+                        {/* Page numbers */}
+                        {getPageNumbers(validCurrentPage, totalPages).map((p, idx) => {
+                          if (p === '...') {
+                            return (
+                              <span key={`ellipsis-${idx}`} style={{ padding: '0 6px', color: '#94a3b8' }}>
+                                ...
+                              </span>
+                            );
+                          }
+                          const isActive = p === validCurrentPage;
+                          return (
+                            <button
+                              key={p}
+                              type="button"
+                              onClick={() => setCurrentPage(p)}
+                              style={{
+                                minWidth: 32,
+                                height: 32,
+                                padding: '0 8px',
+                                borderRadius: 6,
+                                fontSize: '0.85rem',
+                                fontWeight: isActive ? 700 : 500,
+                                background: isActive ? '#1e3a8a' : '#f8fafc',
+                                color: isActive ? '#ffffff' : '#334155',
+                                border: isActive ? '1px solid #1e3a8a' : '1px solid #cbd5e1',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s'
+                              }}
+                            >
+                              {p}
+                            </button>
+                          );
+                        })}
+
+                        {/* Next page */}
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          style={{ padding: '6px 8px', opacity: validCurrentPage === totalPages ? 0.4 : 1, cursor: validCurrentPage === totalPages ? 'not-allowed' : 'pointer' }}
+                          disabled={validCurrentPage === totalPages}
+                          onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                          title="Trang sau"
+                        >
+                          <ChevronRight size={16} />
+                        </button>
+
+                        {/* Last page */}
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          style={{ padding: '6px 8px', opacity: validCurrentPage === totalPages ? 0.4 : 1, cursor: validCurrentPage === totalPages ? 'not-allowed' : 'pointer' }}
+                          disabled={validCurrentPage === totalPages}
+                          onClick={() => setCurrentPage(totalPages)}
+                          title="Trang cuối"
+                        >
+                          <ChevronsRight size={16} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </>
           ) : (
