@@ -1,7 +1,7 @@
 // src/pages/LoginScreen.jsx
 import React, { useState } from 'react';
-import { useAuth, SUPER_ADMIN_EMAIL } from '../context/AuthContext';
-import { Building2, ShieldCheck, Lock, Mail, Eye, EyeOff, Sparkles, ArrowRight, AlertCircle } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { Building2, ShieldCheck, Lock, Mail, Eye, EyeOff, ArrowRight, AlertCircle } from 'lucide-react';
 
 export default function LoginScreen() {
   const { loginWithPassword } = useAuth();
@@ -23,12 +23,6 @@ export default function LoginScreen() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleQuickFillSuperAdmin = () => {
-    setEmail(SUPER_ADMIN_EMAIL);
-    setPassword('Admin@123456');
-    setErrorMsg('');
   };
 
   return (
@@ -180,39 +174,20 @@ export default function LoginScreen() {
           </button>
         </form>
 
-        {/* 3. Super Admin Quick Access Tip */}
+        {/* Security & System Note */}
         <div style={{
-          marginTop: '22px',
-          padding: '12px 14px',
-          background: '#f0fdf4',
-          border: '1px dashed #86efac',
-          borderRadius: '12px',
-          textAlign: 'left'
+          marginTop: '24px',
+          paddingTop: '16px',
+          borderTop: '1px solid #f1f5f9',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 6,
+          fontSize: '0.75rem',
+          color: '#94a3b8'
         }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#166534' }}>
-              👑 Tài khoản Super Admin Tối Cao:
-            </div>
-            <button
-              type="button"
-              onClick={handleQuickFillSuperAdmin}
-              style={{
-                fontSize: '0.725rem',
-                fontWeight: 700,
-                color: '#15803d',
-                background: '#dcfce7',
-                border: 'none',
-                borderRadius: '6px',
-                padding: '3px 8px',
-                cursor: 'pointer'
-              }}
-            >
-              Điền nhanh
-            </button>
-          </div>
-          <div style={{ fontSize: '0.75rem', color: '#15803d', marginTop: 4 }}>
-            Email: <strong>{SUPER_ADMIN_EMAIL}</strong> • Mật khẩu mặc định: <strong>Admin@123456</strong>
-          </div>
+          <ShieldCheck size={14} color="#10b981" />
+          <span>Hệ thống bảo mật xác thực phân quyền nội bộ</span>
         </div>
       </div>
     </div>
