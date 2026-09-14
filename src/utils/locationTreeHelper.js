@@ -1,5 +1,4 @@
-// src/utils/locationTreeHelper.js
-import { cleanText, deduplicateAndMergeLocationTree } from './normalize';
+import { cleanText, deduplicateAndMergeLocationTree } from './normalize.js';
 import { Building, Layers, MapPin, DoorOpen } from 'lucide-react';
 
 // Level hierarchy definitions

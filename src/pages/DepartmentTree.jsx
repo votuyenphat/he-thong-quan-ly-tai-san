@@ -5,7 +5,7 @@ import { useAssets } from '../context/AssetContext';
 import { useAuth } from '../context/AuthContext';
 import { formatVND } from '../utils/formatters';
 import { ConditionBadge, StatusBadge } from '../components/common/Badge';
-import { cleanText } from '../utils/normalize';
+import { cleanText, sortDepartments, getDepartmentAssetCount, isKhoaDepartment } from '../utils/normalize';
 import {
   FolderTree, Building2, Users, MapPin, Phone, Boxes,
   ChevronRight, Shield, UserCheck, Plus, Edit2, Trash2,
@@ -40,8 +40,34 @@ export default function DepartmentTree() {
   const { departments, assets, addDepartment, updateDepartment, deleteDepartment, deleteAssetsBatch } = useAssets();
   const { permissions } = useAuth();
 
-  const [selectedDeptId, setSelectedDeptId] = useState(departments[0]?.id || '');
-  const activeDept = departments.find(d => d.id === selectedDeptId) || departments[0];
+  // Sắp xếp danh sách phòng ban: Khối Phòng nhiều vật tư giảm dần -> Khối Khoa vật tư giảm dần
+  const sortedDepartments = useMemo(() => {
+    return sortDepartments(departments, assets);
+  }, [departments, assets]);
+
+  // Phân chia thành Khối Phòng và Khối Khoa để hiển thị trực quan
+  const { phongDepartments, khoaDepartments } = useMemo(() => {
+    const phong = [];
+    const khoa = [];
+    sortedDepartments.forEach(d => {
+      if (isKhoaDepartment(d.name)) {
+        khoa.push(d);
+      } else {
+        phong.push(d);
+      }
+    });
+    return { phongDepartments: phong, khoaDepartments: khoa };
+  }, [sortedDepartments]);
+
+  const [selectedDeptId, setSelectedDeptId] = useState('');
+  const activeDept = useMemo(() => {
+    if (selectedDeptId) {
+      const found = sortedDepartments.find(d => d.id === selectedDeptId);
+      if (found) return found;
+    }
+    return sortedDepartments[0] || null;
+  }, [sortedDepartments, selectedDeptId]);
+
   const deptAssets = useMemo(() => {
     return assets.filter(a =>
       (activeDept?.id && cleanText(a.departmentId).toLowerCase() === cleanText(activeDept.id).toLowerCase()) ||
@@ -126,8 +152,70 @@ export default function DepartmentTree() {
     if (deleteConfirm) {
       deleteDepartment(deleteConfirm);
       setDeleteConfirm(null);
-      if (selectedDeptId === deleteConfirm) setSelectedDeptId(departments[0]?.id || '');
+      if (selectedDeptId === deleteConfirm) {
+        const remaining = sortedDepartments.filter(d => d.id !== deleteConfirm);
+        setSelectedDeptId(remaining[0]?.id || '');
+      }
     }
+  };
+
+  const renderDeptCard = (dept) => {
+    const isSelected = dept.id === activeDept?.id;
+    const count = getDepartmentAssetCount(dept, assets);
+
+    return (
+      <div
+        key={dept.id}
+        onClick={() => setSelectedDeptId(dept.id)}
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '10px 14px', borderRadius: '8px', cursor: 'pointer',
+          background: isSelected ? 'linear-gradient(135deg, #1e3a8a, #2563eb)' : '#f8fafc',
+          color: isSelected ? '#ffffff' : '#0f172a',
+          border: isSelected ? '1px solid #1e3a8a' : '1px solid #e2e8f0',
+          transition: 'all 150ms'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <ChevronRight size={14} color={isSelected ? '#ffffff' : '#94a3b8'} />
+          <div>
+            <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>{dept.name}</div>
+            <div style={{ fontSize: '0.725rem', color: isSelected ? '#cbd5e1' : '#64748b' }}>
+              Mã: {dept.code}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{
+            fontSize: '0.725rem', fontWeight: 'bold', padding: '2px 8px',
+            borderRadius: '12px',
+            background: isSelected ? 'rgba(255,255,255,0.2)' : '#e2e8f0',
+            color: isSelected ? '#ffffff' : '#475569'
+          }}>
+            {count} TS
+          </span>
+          {permissions?.canManageAssets && (
+            <div style={{ display: 'flex', gap: 2 }} onClick={e => e.stopPropagation()}>
+              <button
+                title="Sửa"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 3, color: isSelected ? '#bfdbfe' : '#d97706' }}
+                onClick={(e) => handleOpenEdit(dept, e)}
+              >
+                <Edit2 size={13} />
+              </button>
+              <button
+                title="Xóa"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 3, color: isSelected ? '#fca5a5' : '#dc2626' }}
+                onClick={(e) => { e.stopPropagation(); setDeleteConfirm(dept.id); }}
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -154,79 +242,77 @@ export default function DepartmentTree() {
         {/* Left: List of departments */}
         <div className="card" style={{ padding: '16px' }}>
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px',
             background: '#eff6ff', borderRadius: '8px', color: '#1e3a8a',
             fontWeight: 800, fontSize: '0.9rem', marginBottom: '14px'
           }}>
-            <Building2 size={18} />
-            <span>ĐƠN VỊ ({departments.length} phòng/ban)</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Building2 size={18} />
+              <span>ĐƠN VỊ ({departments.length} phòng/ban)</span>
+            </div>
+            <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#2563eb' }}>
+              Phòng ↓ • Khoa ↓
+            </span>
           </div>
 
-          {departments.length === 0 ? (
+          {sortedDepartments.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '30px 0', color: '#94a3b8', fontSize: '0.85rem' }}>
               Chưa có phòng ban nào.<br />
               Nhấn <strong>Thêm phòng/ban mới</strong> để bắt đầu.
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {departments.map((dept) => {
-                const isSelected = dept.id === activeDept?.id;
-                const count = assets.filter(a => a.departmentId === dept.id || a.departmentName === dept.name).length;
-
-                return (
-                  <div
-                    key={dept.id}
-                    onClick={() => setSelectedDeptId(dept.id)}
-                    style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      padding: '10px 14px', borderRadius: '8px', cursor: 'pointer',
-                      background: isSelected ? 'linear-gradient(135deg, #1e3a8a, #2563eb)' : '#f8fafc',
-                      color: isSelected ? '#ffffff' : '#0f172a',
-                      border: isSelected ? '1px solid #1e3a8a' : '1px solid #e2e8f0',
-                      transition: 'all 150ms'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <ChevronRight size={14} color={isSelected ? '#ffffff' : '#94a3b8'} />
-                      <div>
-                        <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>{dept.name}</div>
-                        <div style={{ fontSize: '0.725rem', color: isSelected ? '#cbd5e1' : '#64748b' }}>
-                          Mã: {dept.code}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{
-                        fontSize: '0.725rem', fontWeight: 'bold', padding: '2px 8px',
-                        borderRadius: '12px',
-                        background: isSelected ? 'rgba(255,255,255,0.2)' : '#e2e8f0',
-                        color: isSelected ? '#ffffff' : '#475569'
-                      }}>
-                        {count} TS
-                      </span>
-                      {permissions?.canManageAssets && (
-                        <div style={{ display: 'flex', gap: 2 }} onClick={e => e.stopPropagation()}>
-                          <button
-                            title="Sửa"
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 3, color: isSelected ? '#bfdbfe' : '#d97706' }}
-                            onClick={(e) => handleOpenEdit(dept, e)}
-                          >
-                            <Edit2 size={13} />
-                          </button>
-                          <button
-                            title="Xóa"
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 3, color: isSelected ? '#fca5a5' : '#dc2626' }}
-                            onClick={(e) => { e.stopPropagation(); setDeleteConfirm(dept.id); }}
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                      )}
-                    </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Khối Phòng / Ban: nhiều vật tư giảm dần */}
+              {phongDepartments.length > 0 && (
+                <div>
+                  <div style={{
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    color: '#1e40af',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.04em',
+                    padding: '6px 10px',
+                    background: '#f1f5f9',
+                    borderRadius: '6px',
+                    marginBottom: 6,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between'
+                  }}>
+                    <span>📁 KHỐI PHÒNG / BAN ({phongDepartments.length})</span>
+                    <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#3b82f6' }}>Nhiều vật tư giảm dần ↓</span>
                   </div>
-                );
-              })}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {phongDepartments.map(renderDeptCard)}
+                  </div>
+                </div>
+              )}
+
+              {/* Khối Khoa: vật tư giảm dần */}
+              {khoaDepartments.length > 0 && (
+                <div>
+                  <div style={{
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    color: '#065f46',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.04em',
+                    padding: '6px 10px',
+                    background: '#ecfdf5',
+                    borderRadius: '6px',
+                    marginBottom: 6,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between'
+                  }}>
+                    <span>🎓 KHỐI KHOA ĐÀO TẠO ({khoaDepartments.length})</span>
+                    <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#10b981' }}>Vật tư giảm dần ↓</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {khoaDepartments.map(renderDeptCard)}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
