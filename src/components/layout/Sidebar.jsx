@@ -85,25 +85,23 @@ export default function Sidebar({ activeTab, setActiveTab, mobileOpen, onClose }
           gap: 10
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '8px',
-              background: 'linear-gradient(135deg, #2563eb, #3b82f6)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontWeight: 'bold',
-              fontSize: '15px'
-            }}>
-              TS
-            </div>
-            <div>
-              <div style={{ fontSize: '0.95rem', fontWeight: '800', letterSpacing: '0.02em', color: '#ffffff' }}>
-                QUẢN LÝ TÀI SẢN
-              </div>
-              <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
-                Phiên bản 2026 Pro
+            <img 
+              src="/logo.png" 
+              alt="Logo Trường" 
+              style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '50%',
+                objectFit: 'contain',
+                background: '#ffffff',
+                padding: '1px',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.25)',
+                flexShrink: 0
+              }} 
+            />
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: '0.88rem', fontWeight: '800', letterSpacing: '0.01em', color: '#ffffff', lineHeight: 1.25 }}>
+                HỆ THỐNG QUẢN LÝ TÀI SẢN
               </div>
             </div>
           </div>

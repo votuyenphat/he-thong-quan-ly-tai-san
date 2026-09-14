@@ -61,28 +61,22 @@ export default function Navbar({ setActiveTab, onOpenMobileMenu }) {
           <Menu size={20} />
         </button>
 
-        <div style={{
-          background: 'linear-gradient(135deg, #1e3a8a, #2563eb)',
-          color: '#ffffff',
-          borderRadius: '10px',
-          width: '36px',
-          height: '36px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          boxShadow: '0 3px 6px rgba(37,99,235,0.25)',
-          flexShrink: 0
-        }}>
-          <Building2 size={20} />
-        </div>
+        <img 
+          src="/logo.png" 
+          alt="Logo Trường" 
+          style={{
+            width: '38px',
+            height: '38px',
+            borderRadius: '50%',
+            objectFit: 'contain',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
+            flexShrink: 0
+          }} 
+        />
         <div style={{ minWidth: 0 }}>
-          <h1 className="navbar-title" style={{ fontSize: '1rem', fontWeight: '800', color: '#0f172a', letterSpacing: '-0.01em', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <h1 className="navbar-title" style={{ fontSize: '1.05rem', fontWeight: '800', color: '#0f172a', letterSpacing: '-0.01em', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             HỆ THỐNG QUẢN LÝ TÀI SẢN
           </h1>
-          <div className="navbar-subtitle" style={{ fontSize: '0.75rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-            <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }}></span>
-            Cơ sở dữ liệu tập trung 2026 • {currentUser?.department || 'Trường Đại học'}
-          </div>
         </div>
       </div>
 

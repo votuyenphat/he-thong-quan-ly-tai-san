@@ -55,27 +55,25 @@ export default function LoginScreen() {
           background: 'linear-gradient(90deg, #2563eb, #3b82f6, #60a5fa)'
         }} />
 
-        {/* Brand Icon */}
-        <div style={{
-          width: '60px',
-          height: '60px',
-          borderRadius: '16px',
-          background: 'linear-gradient(135deg, #1e3a8a, #2563eb)',
-          color: '#ffffff',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          margin: '0 auto 16px',
-          boxShadow: '0 8px 18px rgba(37, 99, 235, 0.35)'
-        }}>
-          <Building2 size={32} />
-        </div>
+        {/* Brand Logo */}
+        <img 
+          src="/logo.png" 
+          alt="Logo Trường Cao Đẳng Bách Khoa Nam Sài Gòn" 
+          style={{
+            width: '85px',
+            height: '85px',
+            objectFit: 'contain',
+            margin: '0 auto 16px',
+            display: 'block',
+            filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.1))'
+          }} 
+        />
 
         <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.01em', margin: 0 }}>
-          PHẦN MỀM QUẢN LÝ TÀI SẢN
+          HỆ THỐNG QUẢN LÝ TÀI SẢN
         </h1>
-        <p style={{ fontSize: '0.825rem', color: '#64748b', marginTop: '6px', marginBottom: '22px' }}>
-          Hệ thống định danh số, quản lý vòng đời & kiểm kê tài sản phòng ban
+        <p style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '6px', marginBottom: '22px' }}>
+          Trường Cao Đẳng Bách Khoa Nam Sài Gòn
         </p>
 
         {/* Error message */}
