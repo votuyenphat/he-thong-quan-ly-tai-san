@@ -2,14 +2,16 @@
 import React, { useState } from 'react';
 import { useAuth, SUPER_ADMIN_EMAIL } from '../context/AuthContext';
 import { Building2, ShieldCheck, Lock, Mail, Eye, EyeOff, Sparkles, ArrowRight, AlertCircle } from 'lucide-react';
+import GoogleWorkspaceLoginModal from '../components/common/GoogleWorkspaceLoginModal';
 
 export default function LoginScreen() {
-  const { loginWithPassword, loginWithGoogleOAuth } = useAuth();
+  const { loginWithPassword } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [showGoogleModal, setShowGoogleModal] = useState(false);
 
   const handlePasswordLogin = async (e) => {
     e.preventDefault();
@@ -25,16 +27,8 @@ export default function LoginScreen() {
     }
   };
 
-  const handleGoogleLogin = async () => {
-    setErrorMsg('');
-    setLoading(true);
-    try {
-      await loginWithGoogleOAuth();
-    } catch (err) {
-      setErrorMsg(err.message || 'Không thể mở cổng đăng nhập Google. Vui lòng kiểm tra kết nối.');
-    } finally {
-      setLoading(false);
-    }
+  const handleGoogleLogin = () => {
+    setShowGoogleModal(true);
   };
 
   const handleQuickFillSuperAdmin = () => {
@@ -280,6 +274,12 @@ export default function LoginScreen() {
           </div>
         </div>
       </div>
+
+      {/* Modal Đăng nhập Google Workspace */}
+      <GoogleWorkspaceLoginModal 
+        isOpen={showGoogleModal} 
+        onClose={() => setShowGoogleModal(false)} 
+      />
     </div>
   );
 }
