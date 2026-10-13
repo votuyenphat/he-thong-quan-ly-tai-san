@@ -37,6 +37,7 @@ export default function LiquidationQuickModal({ isOpen, onClose, asset }) {
   const { currentUser } = useAuth();
 
   const [formData, setFormData] = useState({
+    quantity: 1,
     reason: LIQUIDATION_REASONS[0],
     method: LIQUIDATION_METHODS[0],
     proposedPrice: '',
@@ -50,12 +51,16 @@ export default function LiquidationQuickModal({ isOpen, onClose, asset }) {
     if (!asset) return;
 
     const code = generateLQCode();
+    const maxQty = Number(asset.quantity) || 1;
+    const finalQty = Math.max(1, Math.min(Number(formData.quantity) || 1, maxQty));
 
     proposeLiquidation({
       code,
       assetId: asset.id,
       assetCode: asset.code,
       assetName: asset.name,
+      quantity: finalQty,
+      unit: asset.unit || 'cái',
       assetType: asset.type,
       departmentId: asset.departmentId,
       departmentName: asset.departmentName,
@@ -104,21 +109,48 @@ export default function LiquidationQuickModal({ isOpen, onClose, asset }) {
         background: '#fef9c3', border: '1px solid #fde68a', borderRadius: '10px',
         padding: '14px 16px', marginBottom: 20
       }}>
-        <div style={{ fontSize: '0.75rem', color: '#92400e', fontWeight: 700, marginBottom: 4 }}>
-          TÀI SẢN ĐỀ NGHỊ THANH LÝ
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+          <div style={{ fontSize: '0.75rem', color: '#92400e', fontWeight: 700 }}>
+            TÀI SẢN ĐỀ NGHỊ THANH LÝ
+          </div>
+          <span className="badge badge-warning" style={{ fontSize: '0.725rem' }}>
+            Đang chọn: {formData.quantity || 1} / {asset.quantity || 1} {asset.unit || 'cái'}
+          </span>
         </div>
         <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '1rem' }}>{asset.name}</div>
         <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: 2 }}>
           Mã: <strong style={{ color: '#1e3a8a', fontFamily: 'monospace' }}>{asset.code}</strong> &nbsp;|&nbsp;
-          Nguyên giá: <strong style={{ color: '#059669' }}>{formatVND(asset.cost)}</strong> &nbsp;|&nbsp;
-          Tình trạng: <strong>{asset.condition}</strong>
+          Số lượng hiện có: <strong style={{ color: '#b45309' }}>{asset.quantity || 1} {asset.unit || 'cái'}</strong> &nbsp;|&nbsp;
+          Nguyên giá: <strong style={{ color: '#059669' }}>{formatVND(asset.cost)}</strong>
         </div>
         <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: 2 }}>
-          Phòng ban: {asset.departmentName}
+          Phòng ban: {asset.departmentName} &nbsp;|&nbsp; Tình trạng: <strong>{asset.condition}</strong>
         </div>
       </div>
 
       <form onSubmit={handleSubmit}>
+        <div style={{ marginBottom: 14 }}>
+          <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>Số lượng đề nghị thanh lý *</span>
+            <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+              Tối đa: <strong>{asset.quantity || 1}</strong> {asset.unit || 'cái'}
+            </span>
+          </label>
+          <input
+            className="form-input"
+            type="number"
+            min={1}
+            max={Number(asset.quantity) || 1}
+            value={formData.quantity}
+            onChange={e => {
+              const max = Number(asset.quantity) || 1;
+              const val = Number(e.target.value);
+              setFormData(p => ({ ...p, quantity: val > max ? max : val < 1 ? 1 : val }));
+            }}
+            required
+          />
+        </div>
+
         <div style={{ marginBottom: 14 }}>
           <label className="form-label">Lý do đề nghị thanh lý *</label>
           <select

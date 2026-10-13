@@ -35,6 +35,7 @@ export default function AssetRecall() {
   // Form inputs
   const [reason, setReason] = useState('');
   const [condition, setCondition] = useState('Tốt');
+  const [quantity, setQuantity] = useState(1);
 
   const targetAsset = assets.find(a => a.id === selectedAssetId);
 
@@ -90,6 +91,7 @@ export default function AssetRecall() {
     setIsSearchFocused(false);
     setReason('');
     setCondition('Tốt');
+    setQuantity(1);
     setIsModalOpen(true);
   };
 
@@ -100,12 +102,17 @@ export default function AssetRecall() {
       return;
     }
 
+    const maxQty = Number(targetAsset.quantity) || 1;
+    const finalQty = Math.max(1, Math.min(Number(quantity) || 1, maxQty));
+
     const code = generateRecallCode(recalls);
     const newRecall = {
       code,
       assetId: targetAsset.id,
       assetCode: targetAsset.code,
       assetName: targetAsset.name,
+      quantity: finalQty,
+      unit: targetAsset.unit || 'cái',
       departmentId: targetAsset.departmentId,
       departmentName: targetAsset.departmentName,
       fromLocation: targetAsset.locationPath || 'Chưa phân vị trí',
@@ -125,6 +132,7 @@ export default function AssetRecall() {
     setIsModalOpen(false);
     setSelectedAssetId('');
     setAssetSearchTerm('');
+    setQuantity(1);
   };
 
   const handleDeleteRecall = (recall) => {
@@ -202,8 +210,13 @@ export default function AssetRecall() {
                     </td>
                     <td>
                       <div style={{ fontWeight: 600, color: '#0f172a' }}>{r.assetName}</div>
-                      <div style={{ fontSize: '0.75rem', color: '#64748b', fontFamily: 'monospace' }}>
-                        Mã TS: {r.assetCode}
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 3 }}>
+                        <span style={{ fontSize: '0.75rem', color: '#64748b', fontFamily: 'monospace' }}>
+                          Mã TS: {r.assetCode}
+                        </span>
+                        <span className="badge badge-info" style={{ fontSize: '0.7rem', padding: '1px 6px' }}>
+                          SL: {r.quantity || 1} {r.unit || 'cái'}
+                        </span>
                       </div>
                     </td>
                     <td>
@@ -290,6 +303,7 @@ export default function AssetRecall() {
                     onClick={() => {
                       setSelectedAssetId('');
                       setAssetSearchTerm('');
+                      setQuantity(1);
                     }}
                     style={{
                       border: 'none',
@@ -395,6 +409,7 @@ export default function AssetRecall() {
                             onClick={() => {
                               setSelectedAssetId(a.id);
                               setAssetSearchTerm(`[${a.code}] ${a.name}`);
+                              setQuantity(1);
                               setIsSearchFocused(false);
                             }}
                             style={{
@@ -413,9 +428,21 @@ export default function AssetRecall() {
                               <span style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.875rem' }}>
                                 <span style={{ color: '#2563eb' }}>[{a.code}]</span> {a.name}
                               </span>
-                              <span className="badge badge-info" style={{ fontSize: '0.7rem' }}>
-                                {a.departmentName || 'Chưa gán đơn vị'}
-                              </span>
+                              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                <span style={{
+                                  background: '#e0f2fe',
+                                  color: '#0369a1',
+                                  fontSize: '0.7rem',
+                                  padding: '1px 6px',
+                                  borderRadius: 4,
+                                  fontWeight: 600
+                                }}>
+                                  SL: {a.quantity || 1} {a.unit || 'cái'}
+                                </span>
+                                <span className="badge badge-info" style={{ fontSize: '0.7rem' }}>
+                                  {a.departmentName || 'Chưa gán đơn vị'}
+                                </span>
+                              </div>
                             </div>
                             <div style={{ display: 'flex', gap: 12, fontSize: '0.775rem', color: '#64748b' }}>
                               <span>📍 Vị trí: <strong>{a.locationPath || 'Chưa xếp'}</strong></span>
@@ -433,19 +460,32 @@ export default function AssetRecall() {
                   background: '#f0fdf4',
                   border: '1px solid #bbf7d0',
                   borderRadius: '8px',
-                  padding: '12px 16px',
+                  padding: '14px 16px',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: 6
+                  gap: 8
                 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
                     <div style={{ fontWeight: 700, color: '#166534', fontSize: '0.95rem' }}>
                       <span style={{ color: '#047857', background: '#d1fae5', padding: '2px 6px', borderRadius: 4, marginRight: 6 }}>
                         {targetAsset.code}
                       </span>
                       {targetAsset.name}
                     </div>
-                    <span className="badge badge-success" style={{ fontSize: '0.75rem' }}>Đã chọn</span>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <span className="badge badge-success" style={{ fontSize: '0.75rem' }}>Đã chọn</span>
+                      <span style={{
+                        background: '#dcfce7',
+                        color: '#15803d',
+                        fontWeight: 700,
+                        padding: '3px 10px',
+                        borderRadius: 20,
+                        fontSize: '0.8rem',
+                        border: '1px solid #86efac'
+                      }}>
+                        Đang chọn thu hồi: {quantity} / {targetAsset.quantity || 1} {targetAsset.unit || 'cái'}
+                      </span>
+                    </div>
                   </div>
                   <div style={{
                     display: 'grid',
@@ -457,6 +497,7 @@ export default function AssetRecall() {
                     paddingTop: 6,
                     borderTop: '1px dashed #86efac'
                   }}>
+                    <div><strong>📦 Số lượng có sẵn:</strong> <span style={{ color: '#047857', fontWeight: 700 }}>{targetAsset.quantity || 1} {targetAsset.unit || 'cái'}</span></div>
                     <div><strong>🏢 Đơn vị hiện tại:</strong> {targetAsset.departmentName}</div>
                     <div><strong>📍 Vị trí hiện tại:</strong> {targetAsset.locationPath || 'Chưa cập nhật'}</div>
                     <div><strong>👤 Người bàn giao:</strong> {targetAsset.currentUser || targetAsset.responsiblePerson || 'Chưa có'}</div>
@@ -469,7 +510,69 @@ export default function AssetRecall() {
               )}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+              {/* Số lượng thu hồi */}
+              <div className="form-group">
+                <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Số lượng thu hồi (*)</span>
+                  {targetAsset && (
+                    <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                      Tối đa: <strong>{targetAsset.quantity || 1}</strong>
+                    </span>
+                  )}
+                </label>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{ padding: '6px 10px', fontWeight: 700 }}
+                    onClick={() => setQuantity(prev => Math.max(1, Number(prev) - 1))}
+                    disabled={!targetAsset || quantity <= 1}
+                  >
+                    -
+                  </button>
+                  <input
+                    type="number"
+                    className="form-input"
+                    style={{ textAlign: 'center', fontWeight: 700 }}
+                    min={1}
+                    max={targetAsset ? (Number(targetAsset.quantity) || 1) : 1}
+                    value={quantity}
+                    onChange={(e) => {
+                      const max = targetAsset ? (Number(targetAsset.quantity) || 1) : 1;
+                      const val = Number(e.target.value);
+                      if (val > max) setQuantity(max);
+                      else if (val < 1) setQuantity(1);
+                      else setQuantity(val);
+                    }}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{ padding: '6px 10px', fontWeight: 700 }}
+                    onClick={() => {
+                      const max = targetAsset ? (Number(targetAsset.quantity) || 1) : 1;
+                      setQuantity(prev => Math.min(max, Number(prev) + 1));
+                    }}
+                    disabled={!targetAsset || quantity >= (Number(targetAsset.quantity) || 1)}
+                  >
+                    +
+                  </button>
+                  {targetAsset && Number(targetAsset.quantity) > 1 && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ fontSize: '0.75rem', whiteSpace: 'nowrap', padding: '6px 8px' }}
+                      onClick={() => setQuantity(Number(targetAsset.quantity) || 1)}
+                      title="Chọn toàn bộ số lượng"
+                    >
+                      Tất cả
+                    </button>
+                  )}
+                </div>
+              </div>
+
               <div className="form-group">
                 <label className="form-label">Tình trạng thực tế khi thu hồi</label>
                 <select
@@ -491,7 +594,7 @@ export default function AssetRecall() {
                   className="form-input"
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
-                  placeholder=""
+                  placeholder="Nhập lý do..."
                   required
                 />
               </div>
@@ -528,6 +631,10 @@ export default function AssetRecall() {
                 <tr>
                   <td style={{ fontWeight: 'bold' }}>Mã tài sản:</td>
                   <td>{selectedPrintRecall.assetCode}</td>
+                </tr>
+                <tr>
+                  <td style={{ fontWeight: 'bold' }}>Số lượng thu hồi:</td>
+                  <td><strong>{selectedPrintRecall.quantity || 1} {selectedPrintRecall.unit || 'cái/thiết bị'}</strong></td>
                 </tr>
                 <tr>
                   <td style={{ fontWeight: 'bold' }}>Đơn vị bàn giao:</td>

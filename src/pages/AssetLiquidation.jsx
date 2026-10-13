@@ -69,6 +69,7 @@ export default function AssetLiquidation() {
   const [reason, setReason] = useState('');
   const [method, setMethod] = useState('Bán phế liệu thu hồi nộp ngân sách');
   const [estPrice, setEstPrice] = useState('');
+  const [quantity, setQuantity] = useState(1);
 
   // For completing liquidation
   const [finalPrice, setFinalPrice] = useState('');
@@ -100,6 +101,7 @@ export default function AssetLiquidation() {
     setReason('');
     setMethod('Bán phế liệu thu hồi nộp ngân sách');
     setEstPrice('');
+    setQuantity(1);
     setIsModalOpen(true);
   };
 
@@ -110,12 +112,17 @@ export default function AssetLiquidation() {
       return;
     }
 
+    const maxQty = Number(targetAsset.quantity) || 1;
+    const finalQty = Math.max(1, Math.min(Number(quantity) || 1, maxQty));
+
     const code = generateLiquidationCode(liquidations);
     const newLq = {
       code,
       assetId: targetAsset.id,
       assetCode: targetAsset.code,
       assetName: targetAsset.name,
+      quantity: finalQty,
+      unit: targetAsset.unit || 'cái',
       originalCost: targetAsset.cost,
       remainingValue: Math.max(0, Math.floor((targetAsset.cost || 0) * 0.05)),
       reason: reason.trim() || 'Đề nghị thanh lý theo quy định',
@@ -127,6 +134,9 @@ export default function AssetLiquidation() {
 
     proposeLiquidation(newLq);
     setIsModalOpen(false);
+    setSelectedAssetId('');
+    setAssetSearchTerm('');
+    setQuantity(1);
   };
 
   const handleApprove = (lqId) => {
@@ -269,8 +279,13 @@ export default function AssetLiquidation() {
                   </td>
                   <td>
                     <div style={{ fontWeight: 600, color: '#0f172a' }}>{lq.assetName}</div>
-                    <div style={{ fontSize: '0.75rem', color: '#64748b', fontFamily: 'monospace' }}>
-                      Mã: {lq.assetCode}
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 2 }}>
+                      <span style={{ fontSize: '0.75rem', color: '#64748b', fontFamily: 'monospace' }}>
+                        Mã: {lq.assetCode}
+                      </span>
+                      <span className="badge badge-warning" style={{ fontSize: '0.7rem', padding: '1px 6px' }}>
+                        SL: {lq.quantity || 1} {lq.unit || 'cái'}
+                      </span>
                     </div>
                     <div style={{ fontSize: '0.75rem', color: '#dc2626', marginTop: 2 }}>
                       Lý do: {lq.reason}
@@ -373,6 +388,7 @@ export default function AssetLiquidation() {
                     onClick={() => {
                       setSelectedAssetId('');
                       setAssetSearchTerm('');
+                      setQuantity(1);
                       setIsSearchFocused(true);
                     }}
                     style={{
@@ -476,6 +492,7 @@ export default function AssetLiquidation() {
                             onClick={() => {
                               setSelectedAssetId(a.id);
                               setAssetSearchTerm(`[${a.code}] ${a.name}`);
+                              setQuantity(1);
                               setIsSearchFocused(false);
                             }}
                             style={{
@@ -494,9 +511,21 @@ export default function AssetLiquidation() {
                               <span style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.875rem' }}>
                                 <span style={{ color: '#2563eb' }}>[{a.code}]</span> {a.name}
                               </span>
-                              <span className="badge badge-info" style={{ fontSize: '0.7rem' }}>
-                                {a.departmentName || 'Chưa gán đơn vị'}
-                              </span>
+                              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                <span style={{
+                                  background: '#fef3c7',
+                                  color: '#b45309',
+                                  fontSize: '0.7rem',
+                                  padding: '1px 6px',
+                                  borderRadius: 4,
+                                  fontWeight: 600
+                                }}>
+                                  SL: {a.quantity || 1} {a.unit || 'cái'}
+                                </span>
+                                <span className="badge badge-info" style={{ fontSize: '0.7rem' }}>
+                                  {a.departmentName || 'Chưa gán đơn vị'}
+                                </span>
+                              </div>
                             </div>
                             <div style={{ display: 'flex', gap: 14, fontSize: '0.775rem', color: '#64748b', flexWrap: 'wrap' }}>
                               <span>💰 Nguyên giá: <strong>{formatVND(a.cost)}</strong></span>
@@ -515,19 +544,32 @@ export default function AssetLiquidation() {
                   background: '#f0fdf4',
                   border: '1px solid #bbf7d0',
                   borderRadius: '8px',
-                  padding: '12px 16px',
+                  padding: '14px 16px',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: 6
+                  gap: 8
                 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
                     <div style={{ fontWeight: 700, color: '#166534', fontSize: '0.95rem' }}>
                       <span style={{ color: '#047857', background: '#d1fae5', padding: '2px 6px', borderRadius: 4, marginRight: 6 }}>
                         {targetAsset.code}
                       </span>
                       {targetAsset.name}
                     </div>
-                    <span className="badge badge-success" style={{ fontSize: '0.75rem' }}>Đã chọn</span>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <span className="badge badge-success" style={{ fontSize: '0.75rem' }}>Đã chọn</span>
+                      <span style={{
+                        background: '#fef3c7',
+                        color: '#b45309',
+                        fontWeight: 700,
+                        padding: '3px 10px',
+                        borderRadius: 20,
+                        fontSize: '0.8rem',
+                        border: '1px solid #fde68a'
+                      }}>
+                        Đang chọn thanh lý: {quantity} / {targetAsset.quantity || 1} {targetAsset.unit || 'cái'}
+                      </span>
+                    </div>
                   </div>
                   <div style={{
                     display: 'grid',
@@ -539,6 +581,7 @@ export default function AssetLiquidation() {
                     paddingTop: 6,
                     borderTop: '1px dashed #86efac'
                   }}>
+                    <div><strong>📦 Số lượng hiện có:</strong> <span style={{ color: '#166534', fontWeight: 700 }}>{targetAsset.quantity || 1} {targetAsset.unit || 'cái'}</span></div>
                     <div><strong>🏢 Đơn vị quản lý:</strong> {targetAsset.departmentName}</div>
                     <div><strong>💰 Nguyên giá ban đầu:</strong> {formatVND(targetAsset.cost)}</div>
                     <div><strong>⚙️ Tình trạng hiện tại:</strong> {targetAsset.condition || 'N/A'}</div>
@@ -550,7 +593,69 @@ export default function AssetLiquidation() {
               )}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+              {/* Số lượng đề nghị thanh lý */}
+              <div className="form-group">
+                <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Số lượng thanh lý (*)</span>
+                  {targetAsset && (
+                    <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                      Tối đa: <strong>{targetAsset.quantity || 1}</strong>
+                    </span>
+                  )}
+                </label>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{ padding: '6px 10px', fontWeight: 700 }}
+                    onClick={() => setQuantity(prev => Math.max(1, Number(prev) - 1))}
+                    disabled={!targetAsset || quantity <= 1}
+                  >
+                    -
+                  </button>
+                  <input
+                    type="number"
+                    className="form-input"
+                    style={{ textAlign: 'center', fontWeight: 700 }}
+                    min={1}
+                    max={targetAsset ? (Number(targetAsset.quantity) || 1) : 1}
+                    value={quantity}
+                    onChange={(e) => {
+                      const max = targetAsset ? (Number(targetAsset.quantity) || 1) : 1;
+                      const val = Number(e.target.value);
+                      if (val > max) setQuantity(max);
+                      else if (val < 1) setQuantity(1);
+                      else setQuantity(val);
+                    }}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{ padding: '6px 10px', fontWeight: 700 }}
+                    onClick={() => {
+                      const max = targetAsset ? (Number(targetAsset.quantity) || 1) : 1;
+                      setQuantity(prev => Math.min(max, Number(prev) + 1));
+                    }}
+                    disabled={!targetAsset || quantity >= (Number(targetAsset.quantity) || 1)}
+                  >
+                    +
+                  </button>
+                  {targetAsset && Number(targetAsset.quantity) > 1 && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ fontSize: '0.75rem', whiteSpace: 'nowrap', padding: '6px 8px' }}
+                      onClick={() => setQuantity(Number(targetAsset.quantity) || 1)}
+                      title="Chọn toàn bộ số lượng"
+                    >
+                      Tất cả
+                    </button>
+                  )}
+                </div>
+              </div>
+
               <div className="form-group">
                 <label className="form-label">Phương thức thanh lý dự kiến</label>
                 <select
@@ -572,7 +677,7 @@ export default function AssetLiquidation() {
                   className="form-input"
                   value={estPrice}
                   onChange={(e) => setEstPrice(e.target.value)}
-                  placeholder=""
+                  placeholder="0"
                 />
               </div>
             </div>
@@ -669,6 +774,10 @@ export default function AssetLiquidation() {
                 <tr>
                   <td style={{ fontWeight: 'bold' }}>Mã định danh tài sản:</td>
                   <td>{selectedPrintLq.assetCode}</td>
+                </tr>
+                <tr>
+                  <td style={{ fontWeight: 'bold' }}>Số lượng đề nghị thanh lý:</td>
+                  <td><strong>{selectedPrintLq.quantity || 1} {selectedPrintLq.unit || 'cái/thiết bị'}</strong></td>
                 </tr>
                 <tr>
                   <td style={{ fontWeight: 'bold' }}>Nguyên giá:</td>
