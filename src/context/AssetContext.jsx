@@ -918,15 +918,21 @@ export function AssetProvider({ children }) {
       return t;
     }));
 
-    // 2. Automatically update asset's location, department, and history
+    // 2. Automatically update asset's location, department, and history (supports multiple items)
+    const items = targetTransfer.items && targetTransfer.items.length > 0 ? targetTransfer.items : null;
+    const targetIds = new Set(items ? items.map(i => i.assetId || i.id) : [targetTransfer.assetId].filter(Boolean));
+    const targetCodes = new Set(items ? items.map(i => i.assetCode || i.code) : [targetTransfer.assetCode].filter(Boolean));
+
     setAssets(prev => prev.map(a => {
-      if (a.id === targetTransfer.assetId || a.code === targetTransfer.assetCode) {
+      if (targetIds.has(a.id) || targetCodes.has(a.code)) {
+        const itemInfo = items?.find(i => (i.assetId || i.id) === a.id || (i.assetCode || i.code) === a.code);
+        const fromLoc = itemInfo?.fromLocation || targetTransfer.fromLocation || a.locationPath;
         const historyEntry = {
-          id: `h-${Date.now()}`,
+          id: `h-${Date.now()}-${a.id}`,
           date: nowStr,
           action: 'Điều chuyển vị trí',
           actor: currentUser ? currentUser.name : 'Ban Giám hiệu',
-          detail: `Điều chuyển theo phiếu ${targetTransfer.code}. Từ: [${targetTransfer.fromLocation}] sang Đến: [${targetTransfer.toLocation}]. Người nhận: ${targetTransfer.receiver}`
+          detail: `Điều chuyển theo phiếu ${targetTransfer.code}. Từ: [${fromLoc}] sang Đến: [${targetTransfer.toLocation}]. Người nhận: ${targetTransfer.receiver}`
         };
         return {
           ...a,
@@ -952,21 +958,31 @@ export function AssetProvider({ children }) {
     // If the transfer was approved, revert asset back to original location, department and user
     if (targetTransfer.status === 'Đã duyệt') {
       const nowStr = new Date().toISOString().slice(0, 10);
+      const items = targetTransfer.items && targetTransfer.items.length > 0 ? targetTransfer.items : null;
+      const targetIds = new Set(items ? items.map(i => i.assetId || i.id) : [targetTransfer.assetId].filter(Boolean));
+      const targetCodes = new Set(items ? items.map(i => i.assetCode || i.code) : [targetTransfer.assetCode].filter(Boolean));
+
       setAssets(prev => prev.map(a => {
-        if (a.id === targetTransfer.assetId || a.code === targetTransfer.assetCode) {
+        if (targetIds.has(a.id) || targetCodes.has(a.code)) {
+          const matched = items?.find(i => (i.assetId || i.id) === a.id || (i.assetCode || i.code) === a.code);
+          const fromLoc = matched?.fromLocation || targetTransfer.fromLocation || a.locationPath;
+          const fromDeptId = matched?.fromDepartmentId || targetTransfer.fromDepartmentId || a.departmentId;
+          const fromDeptName = matched?.fromDepartmentName || targetTransfer.fromDepartmentName || a.departmentName;
+          const fromUser = matched?.sender || targetTransfer.sender || a.currentUser;
+
           const historyEntry = {
-            id: `h-${Date.now()}`,
+            id: `h-${Date.now()}-${a.id}`,
             date: nowStr,
             action: 'Hủy phiếu điều chuyển',
             actor: currentUser ? currentUser.name : 'Quản trị viên',
-            detail: `Xóa phiếu ${targetTransfer.code}. Hoàn trả vị trí từ [${targetTransfer.toLocation}] về vị trí ban đầu: [${targetTransfer.fromLocation || 'Vị trí cũ'}]. Người quản lý: ${targetTransfer.sender || a.currentUser}`
+            detail: `Xóa phiếu ${targetTransfer.code}. Hoàn trả vị trí từ [${targetTransfer.toLocation}] về vị trí ban đầu: [${fromLoc}]. Người quản lý: ${fromUser}`
           };
           return {
             ...a,
-            departmentId: targetTransfer.fromDepartmentId || a.departmentId,
-            departmentName: targetTransfer.fromDepartmentName || a.departmentName,
-            locationPath: targetTransfer.fromLocation || a.locationPath,
-            currentUser: targetTransfer.sender || a.currentUser,
+            departmentId: fromDeptId,
+            departmentName: fromDeptName,
+            locationPath: fromLoc,
+            currentUser: fromUser,
             history: [historyEntry, ...(a.history || [])]
           };
         }
@@ -978,21 +994,22 @@ export function AssetProvider({ children }) {
     addAuditLog(
       'Xóa phiếu điều chuyển',
       targetTransfer.code,
-      `Xóa phiếu ${targetTransfer.code}${targetTransfer.status === 'Đã duyệt' ? ` (hoàn trả tài sản về [${targetTransfer.fromLocation}])` : ''}`
+      `Xóa phiếu ${targetTransfer.code}${targetTransfer.status === 'Đã duyệt' ? ` (hoàn trả tài sản về vị trí cũ)` : ''}`
     );
   };
 
   // Create Recall (Thu hồi) -> automatically shifts status to "Trong kho" & preserves previous state for potential rollback
   const createRecall = (recallData) => {
-    const targetAsset = assets.find(a => a.id === recallData.assetId || a.code === recallData.assetCode);
+    const items = recallData.items && recallData.items.length > 0 ? recallData.items : null;
+    const targetAsset = items ? null : assets.find(a => a.id === recallData.assetId || a.code === recallData.assetCode);
     const newId = `rc-${Date.now()}`;
     const newRecall = {
       id: newId,
       ...recallData,
-      fromLocation: targetAsset?.locationPath || recallData.fromLocation || 'Chưa phân vị trí',
-      fromDepartmentId: targetAsset?.departmentId || recallData.departmentId || '',
-      fromDepartmentName: targetAsset?.departmentName || recallData.departmentName || '',
-      fromUser: targetAsset?.currentUser || targetAsset?.responsiblePerson || recallData.sender || '',
+      fromLocation: recallData.fromLocation || targetAsset?.locationPath || 'Chưa phân vị trí',
+      fromDepartmentId: recallData.departmentId || targetAsset?.departmentId || '',
+      fromDepartmentName: recallData.departmentName || targetAsset?.departmentName || '',
+      fromUser: recallData.sender || targetAsset?.currentUser || targetAsset?.responsiblePerson || '',
       fromStatus: targetAsset?.status || 'Đang sử dụng',
       fromCondition: targetAsset?.condition || 'Tốt',
       status: 'Đã thu hồi',
@@ -1001,11 +1018,15 @@ export function AssetProvider({ children }) {
 
     setRecalls(prev => [newRecall, ...prev]);
 
-    // Update asset to Trong kho
+    // Update asset to Trong kho (supports multiple items)
+    const targetIds = new Set(items ? items.map(i => i.assetId || i.id) : [recallData.assetId].filter(Boolean));
+    const targetCodes = new Set(items ? items.map(i => i.assetCode || i.code) : [recallData.assetCode].filter(Boolean));
+
     setAssets(prev => prev.map(a => {
-      if (a.id === recallData.assetId || a.code === recallData.assetCode) {
+      if (targetIds.has(a.id) || targetCodes.has(a.code)) {
+        const itemInfo = items?.find(i => (i.assetId || i.id) === a.id || (i.assetCode || i.code) === a.code);
         const historyEntry = {
-          id: `h-${Date.now()}`,
+          id: `h-${Date.now()}-${a.id}`,
           date: new Date().toISOString().slice(0, 10),
           action: 'Thu hồi về kho',
           actor: currentUser ? currentUser.name : 'Thủ kho',
@@ -1016,7 +1037,7 @@ export function AssetProvider({ children }) {
           status: 'Trong kho',
           locationPath: 'Cơ sở 1 > Khu A > Tầng 1 > Kho Tổng CS1',
           currentUser: 'Kho Quản lý',
-          condition: recallData.condition || a.condition,
+          condition: itemInfo?.condition || recallData.condition || a.condition,
           history: [historyEntry, ...(a.history || [])]
         };
       }
@@ -1033,23 +1054,35 @@ export function AssetProvider({ children }) {
     if (!targetRecall) return;
 
     const nowStr = new Date().toISOString().slice(0, 10);
+    const items = targetRecall.items && targetRecall.items.length > 0 ? targetRecall.items : null;
+    const targetIds = new Set(items ? items.map(i => i.assetId || i.id) : [targetRecall.assetId].filter(Boolean));
+    const targetCodes = new Set(items ? items.map(i => i.assetCode || i.code) : [targetRecall.assetCode].filter(Boolean));
+
     setAssets(prev => prev.map(a => {
-      if (a.id === targetRecall.assetId || a.code === targetRecall.assetCode) {
+      if (targetIds.has(a.id) || targetCodes.has(a.code)) {
+        const matched = items?.find(i => (i.assetId || i.id) === a.id || (i.assetCode || i.code) === a.code);
+        const fromLoc = matched?.fromLocation || targetRecall.fromLocation || a.locationPath;
+        const fromDeptId = matched?.fromDepartmentId || targetRecall.fromDepartmentId || a.departmentId;
+        const fromDeptName = matched?.fromDepartmentName || targetRecall.fromDepartmentName || a.departmentName;
+        const fromUser = matched?.fromUser || matched?.sender || targetRecall.fromUser || targetRecall.sender || a.currentUser;
+        const fromStatus = matched?.fromStatus || targetRecall.fromStatus || 'Đang sử dụng';
+        const fromCondition = matched?.fromCondition || targetRecall.fromCondition || a.condition;
+
         const historyEntry = {
-          id: `h-${Date.now()}`,
+          id: `h-${Date.now()}-${a.id}`,
           date: nowStr,
           action: 'Hủy phiếu thu hồi (Hoàn trả vị trí cũ)',
           actor: currentUser ? currentUser.name : 'Quản trị viên',
-          detail: `Xóa phiếu thu hồi ${targetRecall.code}. Hoàn trả tài sản về vị trí ban đầu: [${targetRecall.fromLocation || 'Vị trí cũ'}]. Đơn vị: [${targetRecall.fromDepartmentName || a.departmentName}]. Người sử dụng: [${targetRecall.fromUser || targetRecall.sender || a.currentUser}]`
+          detail: `Xóa phiếu thu hồi ${targetRecall.code}. Hoàn trả tài sản về vị trí ban đầu: [${fromLoc}]. Đơn vị: [${fromDeptName}]. Người sử dụng: [${fromUser}]`
         };
         return {
           ...a,
-          locationPath: targetRecall.fromLocation || a.locationPath,
-          departmentId: targetRecall.fromDepartmentId || a.departmentId,
-          departmentName: targetRecall.fromDepartmentName || a.departmentName,
-          currentUser: targetRecall.fromUser || targetRecall.sender || a.currentUser,
-          status: targetRecall.fromStatus || 'Đang sử dụng',
-          condition: targetRecall.fromCondition || a.condition,
+          locationPath: fromLoc,
+          departmentId: fromDeptId,
+          departmentName: fromDeptName,
+          currentUser: fromUser,
+          status: fromStatus,
+          condition: fromCondition,
           history: [historyEntry, ...(a.history || [])]
         };
       }
@@ -1060,7 +1093,7 @@ export function AssetProvider({ children }) {
     addAuditLog(
       'Xóa biên bản thu hồi',
       targetRecall.code,
-      `Xóa biên bản ${targetRecall.code}, hoàn trả tài sản ${targetRecall.assetName} về vị trí cũ: [${targetRecall.fromLocation || 'Vị trí cũ'}]`
+      `Xóa biên bản ${targetRecall.code}, hoàn trả ${items ? `${items.length} tài sản` : targetRecall.assetName} về vị trí cũ`
     );
   };
 
@@ -1079,15 +1112,19 @@ export function AssetProvider({ children }) {
 
     setLiquidations(prev => [newLq, ...prev]);
 
-    // Mark asset status as Chờ thanh lý
+    // Mark asset status as Chờ thanh lý (supports multiple items)
+    const items = lqData.items && lqData.items.length > 0 ? lqData.items : null;
+    const targetIds = new Set(items ? items.map(i => i.assetId || i.id) : [lqData.assetId].filter(Boolean));
+    const targetCodes = new Set(items ? items.map(i => i.assetCode || i.code) : [lqData.assetCode].filter(Boolean));
+
     setAssets(prev => prev.map(a => {
-      if (a.id === lqData.assetId || a.code === lqData.assetCode) {
+      if (targetIds.has(a.id) || targetCodes.has(a.code)) {
         return {
           ...a,
           status: 'Chờ thanh lý',
           history: [
             {
-              id: `h-${Date.now()}`,
+              id: `h-${Date.now()}-${a.id}`,
               date: new Date().toISOString().slice(0, 10),
               action: 'Lập đề nghị thanh lý',
               actor: currentUser ? currentUser.name : 'Cán bộ',
@@ -1100,7 +1137,7 @@ export function AssetProvider({ children }) {
       return a;
     }));
 
-    addAuditLog('Đề nghị thanh lý', newLq.code, `Lập đề nghị thanh lý tài sản: ${newLq.assetName}`);
+    addAuditLog('Đề nghị thanh lý', newLq.code, `Lập đề nghị thanh lý: ${newLq.assetName}`);
   };
 
   // 2. Approve Liquidation
@@ -1141,15 +1178,20 @@ export function AssetProvider({ children }) {
       return l;
     }));
 
+    // Update assets to Đã thanh lý (supports multiple items)
+    const items = targetLq.items && targetLq.items.length > 0 ? targetLq.items : null;
+    const targetIds = new Set(items ? items.map(i => i.assetId || i.id) : [targetLq.assetId].filter(Boolean));
+    const targetCodes = new Set(items ? items.map(i => i.assetCode || i.code) : [targetLq.assetCode].filter(Boolean));
+
     setAssets(prev => prev.map(a => {
-      if (a.id === targetLq.assetId || a.code === targetLq.assetCode) {
+      if (targetIds.has(a.id) || targetCodes.has(a.code)) {
         return {
           ...a,
           status: 'Đã thanh lý',
           condition: 'Không sử dụng được',
           history: [
             {
-              id: `h-${Date.now()}`,
+              id: `h-${Date.now()}-${a.id}`,
               date: nowStr,
               action: 'Hoàn tất thanh lý',
               actor: currentUser ? currentUser.name : 'Hội đồng thanh lý',

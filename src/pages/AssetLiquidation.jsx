@@ -60,8 +60,8 @@ export default function AssetLiquidation() {
     });
   }, [liquidations, assets, permissions?.isSuperAdmin, currentUser]);
 
-  // Search & smart suggestions state for selecting asset
-  const [selectedAssetId, setSelectedAssetId] = useState('');
+  // Selected assets state for batch liquidation
+  const [selectedItems, setSelectedItems] = useState([]);
   const [assetSearchTerm, setAssetSearchTerm] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
 
@@ -69,13 +69,10 @@ export default function AssetLiquidation() {
   const [reason, setReason] = useState('');
   const [method, setMethod] = useState('Bán phế liệu thu hồi nộp ngân sách');
   const [estPrice, setEstPrice] = useState('');
-  const [quantity, setQuantity] = useState(1);
 
   // For completing liquidation
   const [finalPrice, setFinalPrice] = useState('');
   const [finalMethod, setFinalMethod] = useState('Bán đấu giá phế liệu');
-
-  const targetAsset = assets.find(a => a.id === selectedAssetId);
 
   // Gợi ý thông minh tìm kiếm tài sản thanh lý
   const filteredAssetSuggestions = useMemo(() => {
@@ -94,37 +91,93 @@ export default function AssetLiquidation() {
     ).slice(0, 10);
   }, [eligibleAssets, assetSearchTerm]);
 
+  // Thêm tài sản vào danh sách đề nghị thanh lý
+  const handleAddItem = (asset) => {
+    setSelectedItems(prev => {
+      const existing = prev.find(i => i.assetId === asset.id);
+      if (existing) {
+        const maxQty = Number(asset.quantity) || 1;
+        return prev.map(i => i.assetId === asset.id ? { ...i, quantity: Math.min(maxQty, i.quantity + 1) } : i);
+      }
+      return [
+        ...prev,
+        {
+          assetId: asset.id,
+          assetCode: asset.code,
+          assetName: asset.name,
+          quantity: 1,
+          maxQuantity: Number(asset.quantity) || 1,
+          unit: asset.unit || 'cái',
+          cost: Number(asset.cost) || 0,
+          departmentId: asset.departmentId,
+          departmentName: asset.departmentName,
+          fromLocation: asset.locationPath || 'Chưa phân vị trí',
+          fromUser: asset.currentUser || asset.responsiblePerson || '',
+          condition: asset.condition || 'Hỏng / Hết nhu cầu',
+          brand: asset.brand || ''
+        }
+      ];
+    });
+    setAssetSearchTerm('');
+    setIsSearchFocused(false);
+  };
+
+  // Xóa tài sản khỏi danh sách chọn
+  const handleRemoveItem = (assetId) => {
+    setSelectedItems(prev => prev.filter(i => i.assetId !== assetId));
+  };
+
+  // Cập nhật số lượng của tài sản được chọn
+  const handleUpdateItemQuantity = (assetId, deltaOrValue, isDirect = false) => {
+    setSelectedItems(prev => prev.map(i => {
+      if (i.assetId === assetId) {
+        let newQty = isDirect ? Number(deltaOrValue) : i.quantity + deltaOrValue;
+        if (isNaN(newQty) || newQty < 1) newQty = 1;
+        if (newQty > i.maxQuantity) newQty = i.maxQuantity;
+        return { ...i, quantity: newQty };
+      }
+      return i;
+    }));
+  };
+
   const handleOpenCreateModal = () => {
-    setSelectedAssetId('');
+    setSelectedItems([]);
     setAssetSearchTerm('');
     setIsSearchFocused(false);
     setReason('');
     setMethod('Bán phế liệu thu hồi nộp ngân sách');
     setEstPrice('');
-    setQuantity(1);
     setIsModalOpen(true);
   };
 
   const handleCreateSubmit = (e) => {
     e.preventDefault();
-    if (!targetAsset) {
-      alert('Vui lòng tìm kiếm và chọn tài sản cần đề nghị thanh lý!');
+    if (selectedItems.length === 0) {
+      alert('Vui lòng tìm kiếm và chọn ít nhất 1 tài sản cần đề nghị thanh lý!');
       return;
     }
 
-    const maxQty = Number(targetAsset.quantity) || 1;
-    const finalQty = Math.max(1, Math.min(Number(quantity) || 1, maxQty));
-
     const code = generateLiquidationCode(liquidations);
+    const primary = selectedItems[0];
+    const totalQty = selectedItems.reduce((sum, i) => sum + (Number(i.quantity) || 1), 0);
+    const totalOriginalCost = selectedItems.reduce((sum, i) => sum + (Number(i.cost) || 0), 0);
+    const assetNameDisplay = selectedItems.length === 1 
+      ? primary.assetName 
+      : `${primary.assetName} (+${selectedItems.length - 1} tài sản khác)`;
+    const assetCodeDisplay = selectedItems.length === 1 
+      ? primary.assetCode 
+      : `${primary.assetCode} (+${selectedItems.length - 1})`;
+
     const newLq = {
       code,
-      assetId: targetAsset.id,
-      assetCode: targetAsset.code,
-      assetName: targetAsset.name,
-      quantity: finalQty,
-      unit: targetAsset.unit || 'cái',
-      originalCost: targetAsset.cost,
-      remainingValue: Math.max(0, Math.floor((targetAsset.cost || 0) * 0.05)),
+      assetId: primary.assetId,
+      assetCode: assetCodeDisplay,
+      assetName: assetNameDisplay,
+      quantity: totalQty,
+      unit: primary.unit || 'cái',
+      items: selectedItems.map(i => ({ ...i })),
+      originalCost: totalOriginalCost,
+      remainingValue: Math.max(0, Math.floor(totalOriginalCost * 0.05)),
       reason: reason.trim() || 'Đề nghị thanh lý theo quy định',
       method,
       liquidationPrice: Number(estPrice) || 0,
@@ -134,9 +187,8 @@ export default function AssetLiquidation() {
 
     proposeLiquidation(newLq);
     setIsModalOpen(false);
-    setSelectedAssetId('');
+    setSelectedItems([]);
     setAssetSearchTerm('');
-    setQuantity(1);
   };
 
   const handleApprove = (lqId) => {
@@ -278,15 +330,38 @@ export default function AssetLiquidation() {
                     </div>
                   </td>
                   <td>
-                    <div style={{ fontWeight: 600, color: '#0f172a' }}>{lq.assetName}</div>
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 2 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontWeight: 600, color: '#0f172a' }}>{lq.assetName}</span>
+                      {lq.items && lq.items.length > 1 && (
+                        <span className="badge badge-info" style={{ fontSize: '0.7rem', padding: '1px 6px' }}>
+                          {lq.items.length} tài sản
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 2, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: '0.75rem', color: '#64748b', fontFamily: 'monospace' }}>
                         Mã: {lq.assetCode}
                       </span>
                       <span className="badge badge-warning" style={{ fontSize: '0.7rem', padding: '1px 6px' }}>
-                        SL: {lq.quantity || 1} {lq.unit || 'cái'}
+                        Tổng SL: {lq.quantity || 1} {lq.unit || 'cái'}
                       </span>
                     </div>
+                    {lq.items && lq.items.length > 1 && (
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
+                        {lq.items.map((it, idx) => (
+                          <span key={idx} style={{
+                            background: '#f1f5f9',
+                            color: '#475569',
+                            fontSize: '0.7rem',
+                            padding: '1px 5px',
+                            borderRadius: 3,
+                            border: '1px solid #e2e8f0'
+                          }}>
+                            {it.assetCode} ({it.quantity})
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     <div style={{ fontSize: '0.75rem', color: '#dc2626', marginTop: 2 }}>
                       Lý do: {lq.reason}
                     </div>
@@ -376,288 +451,301 @@ export default function AssetLiquidation() {
       >
         <form onSubmit={handleCreateSubmit}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 16 }}>
-            {/* Bộ tìm kiếm tài sản thông minh */}
+            {/* Bộ tìm kiếm & thêm tài sản vào danh sách thanh lý */}
             <div className="form-group" style={{ position: 'relative' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                <label className="form-label" style={{ marginBottom: 0 }}>
-                  Tìm kiếm & Chọn tài sản đề nghị thanh lý (*)
-                </label>
-                {selectedAssetId && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedAssetId('');
-                      setAssetSearchTerm('');
-                      setQuantity(1);
+              <label className="form-label">
+                Tìm kiếm & Chọn tài sản đề nghị thanh lý (*)
+              </label>
+
+              <div style={{ position: 'relative' }}>
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <Search
+                    size={17}
+                    style={{
+                      position: 'absolute',
+                      left: 12,
+                      color: '#64748b',
+                      pointerEvents: 'none'
+                    }}
+                  />
+                  <input
+                    type="text"
+                    className="form-input"
+                    style={{ paddingLeft: 36, paddingRight: assetSearchTerm ? 36 : 12 }}
+                    placeholder="Gõ mã tài sản, tên, đơn vị quản lý, tình trạng để thêm vào danh sách..."
+                    value={assetSearchTerm}
+                    onChange={(e) => {
+                      setAssetSearchTerm(e.target.value);
                       setIsSearchFocused(true);
                     }}
-                    style={{
-                      border: 'none',
-                      background: 'none',
-                      color: '#2563eb',
-                      fontSize: '0.8rem',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      padding: 0
-                    }}
-                  >
-                    🔄 Đổi tài sản khác
-                  </button>
-                )}
-              </div>
-
-              {!selectedAssetId ? (
-                <div style={{ position: 'relative' }}>
-                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                    <Search
-                      size={17}
+                    onFocus={() => setIsSearchFocused(true)}
+                  />
+                  {assetSearchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => setAssetSearchTerm('')}
                       style={{
                         position: 'absolute',
-                        left: 12,
-                        color: '#64748b',
-                        pointerEvents: 'none'
-                      }}
-                    />
-                    <input
-                      type="text"
-                      className="form-input"
-                      style={{ paddingLeft: 36, paddingRight: assetSearchTerm ? 36 : 12 }}
-                      placeholder="Nhập mã tài sản, tên, đơn vị quản lý, tình trạng để tìm nhanh..."
-                      value={assetSearchTerm}
-                      onChange={(e) => {
-                        setAssetSearchTerm(e.target.value);
-                        setIsSearchFocused(true);
-                      }}
-                      onFocus={() => setIsSearchFocused(true)}
-                    />
-                    {assetSearchTerm && (
-                      <button
-                        type="button"
-                        onClick={() => setAssetSearchTerm('')}
-                        style={{
-                          position: 'absolute',
-                          right: 10,
-                          top: '50%',
-                          transform: 'translateY(-50%)',
-                          border: 'none',
-                          background: 'transparent',
-                          color: '#94a3b8',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <X size={15} />
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Dropdown Gợi ý thông minh */}
-                  {isSearchFocused && (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: '100%',
-                        left: 0,
-                        right: 0,
-                        zIndex: 50,
-                        marginTop: 4,
-                        background: '#ffffff',
-                        borderRadius: 8,
-                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
-                        border: '1px solid #cbd5e1',
-                        maxHeight: 280,
-                        overflowY: 'auto'
+                        right: 10,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        border: 'none',
+                        background: 'transparent',
+                        color: '#94a3b8',
+                        cursor: 'pointer'
                       }}
                     >
-                      <div style={{
-                        padding: '6px 12px',
-                        background: '#f1f5f9',
-                        fontSize: '0.75rem',
-                        fontWeight: 600,
-                        color: '#475569',
-                        borderBottom: '1px solid #e2e8f0',
-                        display: 'flex',
-                        justifyContent: 'space-between'
-                      }}>
-                        <span>GỢI Ý TÀI SẢN CÓ THỂ THANH LÝ ({filteredAssetSuggestions.length})</span>
-                        <span style={{ cursor: 'pointer', color: '#64748b' }} onClick={() => setIsSearchFocused(false)}>Đóng</span>
+                      <X size={15} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Dropdown Gợi ý thông minh */}
+                {isSearchFocused && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      right: 0,
+                      zIndex: 50,
+                      marginTop: 4,
+                      background: '#ffffff',
+                      borderRadius: 8,
+                      boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+                      border: '1px solid #cbd5e1',
+                      maxHeight: 280,
+                      overflowY: 'auto'
+                    }}
+                  >
+                    <div style={{
+                      padding: '6px 12px',
+                      background: '#f1f5f9',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      color: '#475569',
+                      borderBottom: '1px solid #e2e8f0',
+                      display: 'flex',
+                      justifyContent: 'space-between'
+                    }}>
+                      <span>GỢI Ý TÀI SẢN CÓ THỂ THANH LÝ ({filteredAssetSuggestions.length})</span>
+                      <span style={{ cursor: 'pointer', color: '#64748b' }} onClick={() => setIsSearchFocused(false)}>Đóng [X]</span>
+                    </div>
+                    {filteredAssetSuggestions.length === 0 ? (
+                      <div style={{ padding: '16px', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>
+                        Không tìm thấy tài sản nào phù hợp với từ khóa "{assetSearchTerm}"
                       </div>
-                      {filteredAssetSuggestions.length === 0 ? (
-                        <div style={{ padding: '16px', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>
-                          Không tìm thấy tài sản nào phù hợp với từ khóa "{assetSearchTerm}"
-                        </div>
-                      ) : (
-                        filteredAssetSuggestions.map((a) => (
+                    ) : (
+                      filteredAssetSuggestions.map((a) => {
+                        const isAlreadySelected = selectedItems.some(i => i.assetId === a.id);
+                        return (
                           <div
                             key={a.id}
-                            onClick={() => {
-                              setSelectedAssetId(a.id);
-                              setAssetSearchTerm(`[${a.code}] ${a.name}`);
-                              setQuantity(1);
-                              setIsSearchFocused(false);
-                            }}
+                            onClick={() => handleAddItem(a)}
                             style={{
                               padding: '10px 14px',
                               borderBottom: '1px solid #f1f5f9',
                               cursor: 'pointer',
                               display: 'flex',
-                              flexDirection: 'column',
-                              gap: 2,
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              background: isAlreadySelected ? '#f0fdf4' : '#ffffff',
                               transition: 'background 0.15s ease'
                             }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'}
-                            onMouseLeave={(e) => e.currentTarget.style.background = '#ffffff'}
+                            onMouseEnter={(e) => e.currentTarget.style.background = isAlreadySelected ? '#dcfce7' : '#f8fafc'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = isAlreadySelected ? '#f0fdf4' : '#ffffff'}
                           >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                               <span style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.875rem' }}>
                                 <span style={{ color: '#2563eb' }}>[{a.code}]</span> {a.name}
                               </span>
-                              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                                <span style={{
-                                  background: '#fef3c7',
-                                  color: '#b45309',
-                                  fontSize: '0.7rem',
-                                  padding: '1px 6px',
-                                  borderRadius: 4,
-                                  fontWeight: 600
-                                }}>
-                                  SL: {a.quantity || 1} {a.unit || 'cái'}
-                                </span>
-                                <span className="badge badge-info" style={{ fontSize: '0.7rem' }}>
-                                  {a.departmentName || 'Chưa gán đơn vị'}
-                                </span>
+                              <div style={{ display: 'flex', gap: 12, fontSize: '0.75rem', color: '#64748b' }}>
+                                <span>🏢 {a.departmentName || 'Chưa gán'}</span>
+                                <span>💰 {formatVND(a.cost)}</span>
+                                <span>📍 {a.locationPath || 'Chưa xếp'}</span>
                               </div>
                             </div>
-                            <div style={{ display: 'flex', gap: 14, fontSize: '0.775rem', color: '#64748b', flexWrap: 'wrap' }}>
-                              <span>💰 Nguyên giá: <strong>{formatVND(a.cost)}</strong></span>
-                              <span>⚙️ Tình trạng: <strong>{a.condition || 'N/A'}</strong></span>
-                              <span>📍 Vị trí: <strong>{a.locationPath || 'Chưa xếp'}</strong></span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{
+                                background: '#fef3c7',
+                                color: '#b45309',
+                                fontSize: '0.7rem',
+                                padding: '2px 6px',
+                                borderRadius: 4,
+                                fontWeight: 600
+                              }}>
+                                Có: {a.quantity || 1} {a.unit || 'cái'}
+                              </span>
+                              <button
+                                type="button"
+                                className="btn btn-sm"
+                                style={{
+                                  background: isAlreadySelected ? '#16a34a' : '#2563eb',
+                                  color: '#fff',
+                                  padding: '4px 8px',
+                                  fontSize: '0.75rem'
+                                }}
+                              >
+                                {isAlreadySelected ? '✓ Đã thêm (+1)' : '+ Chọn'}
+                              </button>
                             </div>
                           </div>
-                        ))
-                      )}
-                    </div>
-                  )}
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Bảng danh sách các tài sản đã chọn */}
+            <div className="form-group">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <label className="form-label" style={{ marginBottom: 0, fontWeight: 700 }}>
+                  Danh sách tài sản đề nghị thanh lý ({selectedItems.length})
+                </label>
+                {selectedItems.length > 0 && (
+                  <div style={{
+                    background: '#ecfdf5',
+                    color: '#065f46',
+                    border: '1px solid #a7f3d0',
+                    borderRadius: 20,
+                    padding: '3px 12px',
+                    fontSize: '0.8rem',
+                    fontWeight: 700
+                  }}>
+                    Đã chọn: {selectedItems.length} tài sản • Tổng SL: {selectedItems.reduce((s, i) => s + i.quantity, 0)} cái • Tổng nguyên giá: {formatVND(selectedItems.reduce((s, i) => s + i.cost, 0))}
+                  </div>
+                )}
+              </div>
+
+              {selectedItems.length === 0 ? (
+                <div style={{
+                  border: '2px dashed #cbd5e1',
+                  borderRadius: 8,
+                  padding: '24px',
+                  textAlign: 'center',
+                  color: '#64748b',
+                  background: '#f8fafc'
+                }}>
+                  <p style={{ margin: 0, fontSize: '0.9rem' }}>
+                    Chưa có tài sản nào trong danh sách đề nghị. Vui lòng tìm kiếm và bấm <strong>+ Chọn</strong> ở trên.
+                  </p>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.775rem', color: '#94a3b8' }}>
+                    (Có thể chọn cùng lúc nhiều tài sản và điều chỉnh số lượng thanh lý riêng cho từng tài sản)
+                  </p>
                 </div>
               ) : (
-                /* Card thông tin chi tiết tài sản đã chọn */
                 <div style={{
-                  background: '#f0fdf4',
-                  border: '1px solid #bbf7d0',
-                  borderRadius: '8px',
-                  padding: '14px 16px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 8
+                  border: '1px solid #e2e8f0',
+                  borderRadius: 8,
+                  overflow: 'hidden',
+                  maxHeight: 280,
+                  overflowY: 'auto'
                 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
-                    <div style={{ fontWeight: 700, color: '#166534', fontSize: '0.95rem' }}>
-                      <span style={{ color: '#047857', background: '#d1fae5', padding: '2px 6px', borderRadius: 4, marginRight: 6 }}>
-                        {targetAsset.code}
-                      </span>
-                      {targetAsset.name}
-                    </div>
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                      <span className="badge badge-success" style={{ fontSize: '0.75rem' }}>Đã chọn</span>
-                      <span style={{
-                        background: '#fef3c7',
-                        color: '#b45309',
-                        fontWeight: 700,
-                        padding: '3px 10px',
-                        borderRadius: 20,
-                        fontSize: '0.8rem',
-                        border: '1px solid #fde68a'
-                      }}>
-                        Đang chọn thanh lý: {quantity} / {targetAsset.quantity || 1} {targetAsset.unit || 'cái'}
-                      </span>
-                    </div>
-                  </div>
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-                    gap: '6px 12px',
-                    fontSize: '0.825rem',
-                    color: '#374151',
-                    marginTop: 4,
-                    paddingTop: 6,
-                    borderTop: '1px dashed #86efac'
-                  }}>
-                    <div><strong>📦 Số lượng hiện có:</strong> <span style={{ color: '#166534', fontWeight: 700 }}>{targetAsset.quantity || 1} {targetAsset.unit || 'cái'}</span></div>
-                    <div><strong>🏢 Đơn vị quản lý:</strong> {targetAsset.departmentName}</div>
-                    <div><strong>💰 Nguyên giá ban đầu:</strong> {formatVND(targetAsset.cost)}</div>
-                    <div><strong>⚙️ Tình trạng hiện tại:</strong> {targetAsset.condition || 'N/A'}</div>
-                    <div><strong>📍 Vị trí:</strong> {targetAsset.locationPath || 'Chưa cập nhật'}</div>
-                    <div><strong>👤 Người sử dụng:</strong> {targetAsset.currentUser || targetAsset.responsiblePerson || 'N/A'}</div>
-                    <div><strong>🏷️ Nhãn hiệu / Loại:</strong> {targetAsset.brand || targetAsset.type || 'N/A'}</div>
-                  </div>
+                  <table className="table" style={{ margin: 0, fontSize: '0.825rem' }}>
+                    <thead style={{ background: '#f8fafc', position: 'sticky', top: 0, zIndex: 10 }}>
+                      <tr>
+                        <th style={{ width: '40px', textAlign: 'center' }}>#</th>
+                        <th>Mã & Tên tài sản</th>
+                        <th>Đơn vị quản lý</th>
+                        <th style={{ textAlign: 'right' }}>Nguyên giá</th>
+                        <th style={{ textAlign: 'center', width: '190px' }}>Số lượng thanh lý</th>
+                        <th style={{ width: '50px', textAlign: 'center' }}>Xóa</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedItems.map((item, index) => (
+                        <tr key={item.assetId}>
+                          <td style={{ textAlign: 'center', color: '#64748b' }}>{index + 1}</td>
+                          <td>
+                            <div style={{ fontWeight: 600, color: '#1e293b' }}>{item.assetName}</div>
+                            <div style={{ fontSize: '0.75rem', color: '#2563eb', fontFamily: 'monospace' }}>
+                              {item.assetCode}
+                            </div>
+                          </td>
+                          <td>
+                            <div style={{ fontSize: '0.775rem', color: '#475569' }}>{item.departmentName}</div>
+                            <div style={{ fontSize: '0.725rem', color: '#64748b' }}>{item.fromLocation}</div>
+                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                            {formatVND(item.cost)}
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                style={{ padding: '2px 8px', fontWeight: 700, height: 26 }}
+                                onClick={() => handleUpdateItemQuantity(item.assetId, -1)}
+                                disabled={item.quantity <= 1}
+                              >
+                                -
+                              </button>
+                              <input
+                                type="number"
+                                className="form-input"
+                                style={{
+                                  width: '55px',
+                                  textAlign: 'center',
+                                  padding: '2px 4px',
+                                  fontWeight: 700,
+                                  height: 26
+                                }}
+                                min={1}
+                                max={item.maxQuantity}
+                                value={item.quantity}
+                                onChange={(e) => handleUpdateItemQuantity(item.assetId, e.target.value, true)}
+                              />
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                style={{ padding: '2px 8px', fontWeight: 700, height: 26 }}
+                                onClick={() => handleUpdateItemQuantity(item.assetId, 1)}
+                                disabled={item.quantity >= item.maxQuantity}
+                              >
+                                +
+                              </button>
+                              {item.maxQuantity > 1 && (
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary btn-sm"
+                                  style={{ padding: '2px 6px', fontSize: '0.7rem', height: 26, whiteSpace: 'nowrap' }}
+                                  onClick={() => handleUpdateItemQuantity(item.assetId, item.maxQuantity, true)}
+                                  title={`Chọn tối đa ${item.maxQuantity}`}
+                                >
+                                  Tất cả ({item.maxQuantity})
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveItem(item.assetId)}
+                              style={{
+                                border: 'none',
+                                background: 'transparent',
+                                color: '#ef4444',
+                                cursor: 'pointer',
+                                padding: 4
+                              }}
+                              title="Xóa khỏi danh sách thanh lý"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
-              {/* Số lượng đề nghị thanh lý */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               <div className="form-group">
-                <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Số lượng thanh lý (*)</span>
-                  {targetAsset && (
-                    <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                      Tối đa: <strong>{targetAsset.quantity || 1}</strong>
-                    </span>
-                  )}
-                </label>
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    style={{ padding: '6px 10px', fontWeight: 700 }}
-                    onClick={() => setQuantity(prev => Math.max(1, Number(prev) - 1))}
-                    disabled={!targetAsset || quantity <= 1}
-                  >
-                    -
-                  </button>
-                  <input
-                    type="number"
-                    className="form-input"
-                    style={{ textAlign: 'center', fontWeight: 700 }}
-                    min={1}
-                    max={targetAsset ? (Number(targetAsset.quantity) || 1) : 1}
-                    value={quantity}
-                    onChange={(e) => {
-                      const max = targetAsset ? (Number(targetAsset.quantity) || 1) : 1;
-                      const val = Number(e.target.value);
-                      if (val > max) setQuantity(max);
-                      else if (val < 1) setQuantity(1);
-                      else setQuantity(val);
-                    }}
-                    required
-                  />
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    style={{ padding: '6px 10px', fontWeight: 700 }}
-                    onClick={() => {
-                      const max = targetAsset ? (Number(targetAsset.quantity) || 1) : 1;
-                      setQuantity(prev => Math.min(max, Number(prev) + 1));
-                    }}
-                    disabled={!targetAsset || quantity >= (Number(targetAsset.quantity) || 1)}
-                  >
-                    +
-                  </button>
-                  {targetAsset && Number(targetAsset.quantity) > 1 && (
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      style={{ fontSize: '0.75rem', whiteSpace: 'nowrap', padding: '6px 8px' }}
-                      onClick={() => setQuantity(Number(targetAsset.quantity) || 1)}
-                      title="Chọn toàn bộ số lượng"
-                    >
-                      Tất cả
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Phương thức thanh lý dự kiến</label>
+                <label className="form-label">Phương thức thanh lý dự kiến (*)</label>
                 <select
                   className="form-select"
                   value={method}
@@ -688,7 +776,7 @@ export default function AssetLiquidation() {
                 className="form-textarea"
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                placeholder=""
+                placeholder="Nêu rõ tình trạng hỏng hóc, giám định kỹ thuật hoặc hết niên hạn sử dụng..."
                 rows={3}
                 required
               />
@@ -765,50 +853,118 @@ export default function AssetLiquidation() {
             <p>Căn cứ Quyết định thành lập Hội đồng thanh lý tài sản của Hiệu trưởng Nhà trường.</p>
             <p>Hội đồng thanh lý tiến hành họp và thống nhất kết luận xử lý tài sản cố định như sau:</p>
 
-            <table style={{ marginTop: '16px' }}>
-              <tbody>
-                <tr>
-                  <td style={{ width: '30%', fontWeight: 'bold' }}>Tên tài sản thanh lý:</td>
-                  <td><strong>{selectedPrintLq.assetName}</strong></td>
-                </tr>
-                <tr>
-                  <td style={{ fontWeight: 'bold' }}>Mã định danh tài sản:</td>
-                  <td>{selectedPrintLq.assetCode}</td>
-                </tr>
-                <tr>
-                  <td style={{ fontWeight: 'bold' }}>Số lượng đề nghị thanh lý:</td>
-                  <td><strong>{selectedPrintLq.quantity || 1} {selectedPrintLq.unit || 'cái/thiết bị'}</strong></td>
-                </tr>
-                <tr>
-                  <td style={{ fontWeight: 'bold' }}>Nguyên giá:</td>
-                  <td>{formatVND(selectedPrintLq.originalCost)}</td>
-                </tr>
-                <tr>
-                  <td style={{ fontWeight: 'bold' }}>Giá trị còn lại theo sổ sách:</td>
-                  <td>{formatVND(selectedPrintLq.remainingValue)}</td>
-                </tr>
-                <tr>
-                  <td style={{ fontWeight: 'bold' }}>Lý do thanh lý:</td>
-                  <td>{selectedPrintLq.reason}</td>
-                </tr>
-                <tr>
-                  <td style={{ fontWeight: 'bold' }}>Hình thức thanh lý:</td>
-                  <td>{selectedPrintLq.method}</td>
-                </tr>
-                <tr>
-                  <td style={{ fontWeight: 'bold' }}>Giá thanh lý thu hồi:</td>
-                  <td><strong>{formatVND(selectedPrintLq.liquidationPrice)}</strong></td>
-                </tr>
-                <tr>
-                  <td style={{ fontWeight: 'bold' }}>Người đề nghị:</td>
-                  <td>{selectedPrintLq.requester}</td>
-                </tr>
-                <tr>
-                  <td style={{ fontWeight: 'bold' }}>Cấp phê duyệt:</td>
-                  <td>{selectedPrintLq.approver}</td>
-                </tr>
-              </tbody>
-            </table>
+            {selectedPrintLq.items && selectedPrintLq.items.length > 1 ? (
+              <>
+                <table style={{ marginTop: '16px', marginBottom: '16px' }}>
+                  <tbody>
+                    <tr>
+                      <td style={{ width: '25%', fontWeight: 'bold' }}>Lý do thanh lý:</td>
+                      <td colSpan="3">{selectedPrintLq.reason}</td>
+                    </tr>
+                    <tr>
+                      <td style={{ fontWeight: 'bold' }}>Hình thức thanh lý:</td>
+                      <td>{selectedPrintLq.method}</td>
+                      <td style={{ width: '20%', fontWeight: 'bold' }}>Giá thu hồi dự kiến:</td>
+                      <td><strong>{formatVND(selectedPrintLq.liquidationPrice)}</strong></td>
+                    </tr>
+                    <tr>
+                      <td style={{ fontWeight: 'bold' }}>Người đề nghị:</td>
+                      <td>{selectedPrintLq.requester}</td>
+                      <td style={{ fontWeight: 'bold' }}>Cấp phê duyệt:</td>
+                      <td>{selectedPrintLq.approver}</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                <div style={{ fontWeight: 'bold', margin: '14px 0 8px', fontSize: '13px', textTransform: 'uppercase' }}>
+                  DANH MỤC CHI TIẾT TÀI SẢN ĐỀ NGHỊ THANH LÝ ({selectedPrintLq.items.length} TÀI SẢN):
+                </div>
+
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12px' }}>
+                  <thead>
+                    <tr style={{ background: '#f1f5f9' }}>
+                      <th style={{ border: '1px solid #333', padding: '6px', textAlign: 'center', width: '35px' }}>STT</th>
+                      <th style={{ border: '1px solid #333', padding: '6px', width: '90px' }}>Mã TS</th>
+                      <th style={{ border: '1px solid #333', padding: '6px' }}>Tên tài sản</th>
+                      <th style={{ border: '1px solid #333', padding: '6px', textAlign: 'center', width: '50px' }}>ĐVT</th>
+                      <th style={{ border: '1px solid #333', padding: '6px', textAlign: 'center', width: '60px' }}>Số lượng</th>
+                      <th style={{ border: '1px solid #333', padding: '6px', textAlign: 'right', width: '100px' }}>Nguyên giá</th>
+                      <th style={{ border: '1px solid #333', padding: '6px' }}>Đơn vị / Vị trí</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedPrintLq.items.map((it, idx) => (
+                      <tr key={idx}>
+                        <td style={{ border: '1px solid #333', padding: '6px', textAlign: 'center' }}>{idx + 1}</td>
+                        <td style={{ border: '1px solid #333', padding: '6px', fontFamily: 'monospace' }}>{it.assetCode}</td>
+                        <td style={{ border: '1px solid #333', padding: '6px', fontWeight: 'bold' }}>{it.assetName}</td>
+                        <td style={{ border: '1px solid #333', padding: '6px', textAlign: 'center' }}>{it.unit || 'cái'}</td>
+                        <td style={{ border: '1px solid #333', padding: '6px', textAlign: 'center', fontWeight: 'bold' }}>{it.quantity}</td>
+                        <td style={{ border: '1px solid #333', padding: '6px', textAlign: 'right' }}>{formatVND(it.cost)}</td>
+                        <td style={{ border: '1px solid #333', padding: '6px', fontSize: '11px' }}>
+                          {it.departmentName} {it.fromLocation ? `(${it.fromLocation})` : ''}
+                        </td>
+                      </tr>
+                    ))}
+                    <tr style={{ fontWeight: 'bold', background: '#f8fafc' }}>
+                      <td colSpan="4" style={{ border: '1px solid #333', padding: '6px', textAlign: 'right' }}>TỔNG CỘNG:</td>
+                      <td style={{ border: '1px solid #333', padding: '6px', textAlign: 'center' }}>
+                        {selectedPrintLq.items.reduce((s, i) => s + (Number(i.quantity) || 1), 0)}
+                      </td>
+                      <td style={{ border: '1px solid #333', padding: '6px', textAlign: 'right' }}>
+                        {formatVND(selectedPrintLq.originalCost)}
+                      </td>
+                      <td style={{ border: '1px solid #333', padding: '6px' }}></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </>
+            ) : (
+              <table style={{ marginTop: '16px' }}>
+                <tbody>
+                  <tr>
+                    <td style={{ width: '30%', fontWeight: 'bold' }}>Tên tài sản thanh lý:</td>
+                    <td><strong>{selectedPrintLq.assetName}</strong></td>
+                  </tr>
+                  <tr>
+                    <td style={{ fontWeight: 'bold' }}>Mã định danh tài sản:</td>
+                    <td>{selectedPrintLq.assetCode}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ fontWeight: 'bold' }}>Số lượng đề nghị thanh lý:</td>
+                    <td><strong>{selectedPrintLq.quantity || 1} {selectedPrintLq.unit || 'cái/thiết bị'}</strong></td>
+                  </tr>
+                  <tr>
+                    <td style={{ fontWeight: 'bold' }}>Nguyên giá:</td>
+                    <td>{formatVND(selectedPrintLq.originalCost)}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ fontWeight: 'bold' }}>Giá trị còn lại theo sổ sách:</td>
+                    <td>{formatVND(selectedPrintLq.remainingValue)}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ fontWeight: 'bold' }}>Lý do thanh lý:</td>
+                    <td>{selectedPrintLq.reason}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ fontWeight: 'bold' }}>Hình thức thanh lý:</td>
+                    <td>{selectedPrintLq.method}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ fontWeight: 'bold' }}>Giá thanh lý thu hồi:</td>
+                    <td><strong>{formatVND(selectedPrintLq.liquidationPrice)}</strong></td>
+                  </tr>
+                  <tr>
+                    <td style={{ fontWeight: 'bold' }}>Người đề nghị:</td>
+                    <td>{selectedPrintLq.requester}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ fontWeight: 'bold' }}>Cấp phê duyệt:</td>
+                    <td>{selectedPrintLq.approver}</td>
+                  </tr>
+                </tbody>
+              </table>
+            )}
 
             <div className="signatures">
               <div className="sig-block">

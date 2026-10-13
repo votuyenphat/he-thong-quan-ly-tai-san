@@ -32,8 +32,8 @@ export default function AssetTransfer() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedPrintTransfer, setSelectedPrintTransfer] = useState(null);
 
-  // Transfer Form State
-  const [selectedAssetId, setSelectedAssetId] = useState('');
+  // Transfer Form State - Multi asset support
+  const [selectedItems, setSelectedItems] = useState([]);
   const [assetSearchTerm, setAssetSearchTerm] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [toDeptId, setToDeptId] = useState(departments[0]?.id || '');
@@ -41,7 +41,6 @@ export default function AssetTransfer() {
   const [receiver, setReceiver] = useState('');
   const [reason, setReason] = useState('');
 
-  const targetAsset = assets.find(a => a.id === selectedAssetId);
   const targetToDept = departments.find(d => d.id === toDeptId);
 
   // Gợi ý thông minh danh sách tài sản (loại trừ tài sản đã thanh lý và giới hạn theo phòng nếu là QL phòng)
@@ -71,6 +70,54 @@ export default function AssetTransfer() {
     ).slice(0, 10);
   }, [assets, assetSearchTerm, permissions?.isSuperAdmin, currentUser]);
 
+  // Thêm tài sản vào danh sách điều chuyển
+  const handleAddItem = (asset) => {
+    setSelectedItems(prev => {
+      const existing = prev.find(i => i.assetId === asset.id);
+      if (existing) {
+        const maxQty = Number(asset.quantity) || 1;
+        return prev.map(i => i.assetId === asset.id ? { ...i, quantity: Math.min(maxQty, i.quantity + 1) } : i);
+      }
+      return [
+        ...prev,
+        {
+          assetId: asset.id,
+          assetCode: asset.code,
+          assetName: asset.name,
+          quantity: 1,
+          maxQuantity: Number(asset.quantity) || 1,
+          unit: asset.unit || 'cái',
+          departmentId: asset.departmentId,
+          departmentName: asset.departmentName,
+          fromLocation: asset.locationPath || 'Chưa phân vị trí',
+          fromUser: asset.currentUser || asset.responsiblePerson || '',
+          condition: asset.condition || 'Tốt',
+          brand: asset.brand || ''
+        }
+      ];
+    });
+    setAssetSearchTerm('');
+    setIsSearchFocused(false);
+  };
+
+  // Xóa tài sản khỏi danh sách chọn
+  const handleRemoveItem = (assetId) => {
+    setSelectedItems(prev => prev.filter(i => i.assetId !== assetId));
+  };
+
+  // Cập nhật số lượng của tài sản được chọn
+  const handleUpdateItemQuantity = (assetId, deltaOrValue, isDirect = false) => {
+    setSelectedItems(prev => prev.map(i => {
+      if (i.assetId === assetId) {
+        let newQty = isDirect ? Number(deltaOrValue) : i.quantity + deltaOrValue;
+        if (isNaN(newQty) || newQty < 1) newQty = 1;
+        if (newQty > i.maxQuantity) newQty = i.maxQuantity;
+        return { ...i, quantity: newQty };
+      }
+      return i;
+    }));
+  };
+
   // Lọc danh sách phiếu: Super Admin thấy tất cả; Quản lý phòng thấy phiếu gửi đi VÀ gửi đến phòng mình
   const visibleTransfers = useMemo(() => {
     if (permissions?.isSuperAdmin) return transfers;
@@ -86,7 +133,7 @@ export default function AssetTransfer() {
   }, [transfers, permissions?.isSuperAdmin, currentUser]);
 
   const handleOpenCreateModal = () => {
-    setSelectedAssetId('');
+    setSelectedItems([]);
     setAssetSearchTerm('');
     setIsSearchFocused(false);
     setToDeptId(departments[0]?.id || '');
@@ -98,50 +145,65 @@ export default function AssetTransfer() {
 
   const handleCreateTransferSubmit = (e) => {
     e.preventDefault();
-    if (!targetAsset) {
-      alert('Vui lòng tìm kiếm và chọn 1 tài sản cần điều chuyển!');
+    if (selectedItems.length === 0) {
+      alert('Vui lòng tìm kiếm và chọn ít nhất 1 tài sản cần điều chuyển!');
       return;
     }
     if (!toLocation.trim()) {
-      alert('Vui lòng nhập vị trí phòng ốc mới chi tiết!');
+      alert('Vui lòng chọn hoặc nhập vị trí phòng ốc mới chi tiết!');
       return;
     }
 
     const code = generateTransferCode(transfers);
+    const primary = selectedItems[0];
+    const totalQty = selectedItems.reduce((sum, i) => sum + (Number(i.quantity) || 1), 0);
+    const assetNameDisplay = selectedItems.length === 1 
+      ? primary.assetName 
+      : `${primary.assetName} (+${selectedItems.length - 1} tài sản khác)`;
+    const assetCodeDisplay = selectedItems.length === 1 
+      ? primary.assetCode 
+      : `${primary.assetCode} (+${selectedItems.length - 1})`;
+
     const newTransfer = {
       code,
-      assetId: targetAsset.id,
-      assetCode: targetAsset.code,
-      assetName: targetAsset.name,
-      fromDepartmentId: targetAsset.departmentId,
-      fromDepartmentName: targetAsset.departmentName,
-      fromLocation: targetAsset.locationPath || 'Chưa phân vị trí',
+      assetId: primary.assetId,
+      assetCode: assetCodeDisplay,
+      assetName: assetNameDisplay,
+      quantity: totalQty,
+      unit: primary.unit || 'cái',
+      items: selectedItems.map(i => ({ ...i })),
+      fromDepartmentId: primary.departmentId,
+      fromDepartmentName: primary.departmentName,
+      fromLocation: primary.fromLocation,
       toDepartmentId: targetToDept?.id || '',
       toDepartmentName: targetToDept?.name || '',
       toLocation: cleanText(toLocation),
-      sender: targetAsset.currentUser || targetAsset.responsiblePerson || currentUser?.name,
+      sender: primary.fromUser || currentUser?.name || 'Cán bộ bàn giao',
       receiver: receiver.trim() || 'Cán bộ tiếp nhận',
-      reason: reason.trim() || 'Điều chuyển vị trí công tác phục vụ đào tạo'
+      reason: reason.trim() || 'Điều chuyển vị trí công tác phục vụ đào tạo',
+      date: new Date().toISOString().slice(0, 10)
     };
 
     createTransfer(newTransfer);
     setIsModalOpen(false);
     setReason('');
-    setSelectedAssetId('');
+    setSelectedItems([]);
     setAssetSearchTerm('');
     setToLocation('');
   };
 
   const handleApprove = (tId) => {
-    if (window.confirm('Xác nhận phê duyệt phiếu điều chuyển này? Hệ thống sẽ tự động cập nhật vị trí mới cho tài sản.')) {
+    if (window.confirm('Xác nhận phê duyệt phiếu điều chuyển này? Hệ thống sẽ tự động cập nhật vị trí mới cho toàn bộ tài sản trong phiếu.')) {
       approveTransfer(tId);
     }
   };
 
   const handleDeleteTransfer = (transfer) => {
     const isApproved = transfer.status === 'Đã duyệt';
+    const hasMultiple = transfer.items && transfer.items.length > 1;
+    const itemsCountText = hasMultiple ? `${transfer.items.length} tài sản` : `tài sản "${transfer.assetName}" (${transfer.assetCode})`;
     const msg = isApproved
-      ? `Xác nhận xóa phiếu điều chuyển "${transfer.code}"?\n\n⚠️ LƯU Ý QUAN TRỌNG: Phiếu này đã được duyệt. Khi xóa, tài sản "${transfer.assetName}" (${transfer.assetCode}) sẽ TỰ ĐỘNG QUAY VỀ VỊ TRÍ BAN ĐẦU:\n• Vị trí cũ: [${transfer.fromLocation || 'Chưa rõ'}]\n• Đơn vị quản lý: [${transfer.fromDepartmentName || 'Chưa rõ'}]`
+      ? `Xác nhận xóa phiếu điều chuyển "${transfer.code}"?\n\n⚠️ LƯU Ý QUAN TRỌNG: Phiếu này đã được duyệt. Khi xóa, ${itemsCountText} sẽ TỰ ĐỘNG QUAY VỀ VỊ TRÍ BAN ĐẦU:\n• Vị trí cũ: [${transfer.fromLocation || 'Chưa rõ'}]\n• Đơn vị quản lý: [${transfer.fromDepartmentName || 'Chưa rõ'}]`
       : `Xác nhận xóa phiếu điều chuyển "${transfer.code}"?`;
 
     if (window.confirm(msg)) {
@@ -236,10 +298,38 @@ export default function AssetTransfer() {
                         )}
                       </td>
                       <td>
-                        <div style={{ fontWeight: 600, color: '#0f172a' }}>{t.assetName}</div>
-                        <div style={{ fontSize: '0.75rem', color: '#64748b', fontFamily: 'monospace' }}>
-                          Mã TS: {t.assetCode}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontWeight: 600, color: '#0f172a' }}>{t.assetName}</span>
+                          {t.items && t.items.length > 1 && (
+                            <span className="badge badge-info" style={{ fontSize: '0.7rem', padding: '1px 6px' }}>
+                              {t.items.length} tài sản
+                            </span>
+                          )}
                         </div>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 2, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '0.75rem', color: '#64748b', fontFamily: 'monospace' }}>
+                            Mã TS: {t.assetCode}
+                          </span>
+                          <span className="badge badge-warning" style={{ fontSize: '0.7rem', padding: '1px 6px' }}>
+                            Tổng SL: {t.quantity || 1} {t.unit || 'cái'}
+                          </span>
+                        </div>
+                        {t.items && t.items.length > 1 && (
+                          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
+                            {t.items.map((it, idx) => (
+                              <span key={idx} style={{
+                                background: '#f1f5f9',
+                                color: '#475569',
+                                fontSize: '0.7rem',
+                                padding: '1px 5px',
+                                borderRadius: 3,
+                                border: '1px solid #e2e8f0'
+                              }}>
+                                {it.assetCode} ({it.quantity})
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </td>
                     <td>
                       <div style={{ fontWeight: 500, fontSize: '0.825rem', color: '#475569' }}>
@@ -340,188 +430,294 @@ export default function AssetTransfer() {
       >
         <form onSubmit={handleCreateTransferSubmit}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 16 }}>
-            {/* Tìm kiếm & Gợi ý thông minh tài sản */}
+            {/* Bộ tìm kiếm & thêm tài sản vào danh sách điều chuyển */}
             <div className="form-group" style={{ position: 'relative' }}>
-              <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span>Tìm kiếm & chọn tài sản cần điều chuyển (*)</span>
-                {targetAsset && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedAssetId('');
-                      setAssetSearchTerm('');
-                    }}
-                    style={{
-                      border: 'none',
-                      background: 'transparent',
-                      color: '#2563eb',
-                      cursor: 'pointer',
-                      fontSize: '0.8rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      fontWeight: 500
-                    }}
-                  >
-                    <RotateCcw size={12} /> Đổi tài sản khác
-                  </button>
-                )}
+              <label className="form-label">
+                Tìm kiếm & chọn tài sản cần điều chuyển (*)
               </label>
 
-              {!targetAsset ? (
-                <div style={{ position: 'relative' }}>
-                  <div style={{ position: 'relative' }}>
-                    <Search
-                      size={16}
+              <div style={{ position: 'relative' }}>
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <Search
+                    size={16}
+                    style={{
+                      position: 'absolute',
+                      left: 12,
+                      color: '#64748b',
+                      pointerEvents: 'none'
+                    }}
+                  />
+                  <input
+                    type="text"
+                    className="form-input"
+                    style={{ paddingLeft: 36, paddingRight: assetSearchTerm ? 36 : 12 }}
+                    placeholder="Nhập mã tài sản, tên, đơn vị, người sử dụng để tìm kiếm và thêm vào danh sách..."
+                    value={assetSearchTerm}
+                    onChange={(e) => {
+                      setAssetSearchTerm(e.target.value);
+                      setIsSearchFocused(true);
+                    }}
+                    onFocus={() => setIsSearchFocused(true)}
+                  />
+                  {assetSearchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => setAssetSearchTerm('')}
                       style={{
                         position: 'absolute',
-                        left: 12,
+                        right: 10,
                         top: '50%',
                         transform: 'translateY(-50%)',
-                        color: '#64748b'
-                      }}
-                    />
-                    <input
-                      type="text"
-                      className="form-input"
-                      style={{ paddingLeft: 36, paddingRight: assetSearchTerm ? 36 : 12 }}
-                      placeholder="Nhập mã tài sản, tên, đơn vị, người sử dụng để tìm kiếm nhanh..."
-                      value={assetSearchTerm}
-                      onChange={(e) => {
-                        setAssetSearchTerm(e.target.value);
-                        setIsSearchFocused(true);
-                      }}
-                      onFocus={() => setIsSearchFocused(true)}
-                    />
-                    {assetSearchTerm && (
-                      <button
-                        type="button"
-                        onClick={() => setAssetSearchTerm('')}
-                        style={{
-                          position: 'absolute',
-                          right: 10,
-                          top: '50%',
-                          transform: 'translateY(-50%)',
-                          border: 'none',
-                          background: 'transparent',
-                          color: '#94a3b8',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <X size={15} />
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Dropdown Gợi ý thông minh */}
-                  {isSearchFocused && (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: '100%',
-                        left: 0,
-                        right: 0,
-                        zIndex: 50,
-                        marginTop: 4,
-                        background: '#ffffff',
-                        borderRadius: 8,
-                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
-                        border: '1px solid #cbd5e1',
-                        maxHeight: 280,
-                        overflowY: 'auto'
+                        border: 'none',
+                        background: 'transparent',
+                        color: '#94a3b8',
+                        cursor: 'pointer'
                       }}
                     >
-                      <div style={{
-                        padding: '6px 12px',
-                        background: '#f1f5f9',
-                        fontSize: '0.75rem',
-                        fontWeight: 600,
-                        color: '#475569',
-                        borderBottom: '1px solid #e2e8f0',
-                        display: 'flex',
-                        justifyContent: 'space-between'
-                      }}>
-                        <span>GỢI Ý TÀI SẢN PHÙ HỢP ({filteredAssetSuggestions.length})</span>
-                        <span style={{ cursor: 'pointer', color: '#64748b' }} onClick={() => setIsSearchFocused(false)}>Đóng</span>
+                      <X size={15} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Dropdown Gợi ý thông minh */}
+                {isSearchFocused && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      right: 0,
+                      zIndex: 50,
+                      marginTop: 4,
+                      background: '#ffffff',
+                      borderRadius: 8,
+                      boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+                      border: '1px solid #cbd5e1',
+                      maxHeight: 280,
+                      overflowY: 'auto'
+                    }}
+                  >
+                    <div style={{
+                      padding: '6px 12px',
+                      background: '#f1f5f9',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      color: '#475569',
+                      borderBottom: '1px solid #e2e8f0',
+                      display: 'flex',
+                      justifyContent: 'space-between'
+                    }}>
+                      <span>GỢI Ý TÀI SẢN PHÙ HỢP ({filteredAssetSuggestions.length})</span>
+                      <span style={{ cursor: 'pointer', color: '#64748b' }} onClick={() => setIsSearchFocused(false)}>Đóng [X]</span>
+                    </div>
+                    {filteredAssetSuggestions.length === 0 ? (
+                      <div style={{ padding: '16px', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>
+                        Không tìm thấy tài sản nào phù hợp với từ khóa "{assetSearchTerm}"
                       </div>
-                      {filteredAssetSuggestions.length === 0 ? (
-                        <div style={{ padding: '16px', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>
-                          Không tìm thấy tài sản nào phù hợp với từ khóa "{assetSearchTerm}"
-                        </div>
-                      ) : (
-                        filteredAssetSuggestions.map((a) => (
+                    ) : (
+                      filteredAssetSuggestions.map((a) => {
+                        const isAlreadySelected = selectedItems.some(i => i.assetId === a.id);
+                        return (
                           <div
                             key={a.id}
-                            onClick={() => {
-                              setSelectedAssetId(a.id);
-                              setAssetSearchTerm(`[${a.code}] ${a.name}`);
-                              setIsSearchFocused(false);
-                            }}
+                            onClick={() => handleAddItem(a)}
                             style={{
                               padding: '10px 14px',
                               borderBottom: '1px solid #f1f5f9',
                               cursor: 'pointer',
                               display: 'flex',
-                              flexDirection: 'column',
-                              gap: 2,
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              background: isAlreadySelected ? '#f0fdf4' : '#ffffff',
                               transition: 'background 0.15s ease'
                             }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'}
-                            onMouseLeave={(e) => e.currentTarget.style.background = '#ffffff'}
+                            onMouseEnter={(e) => e.currentTarget.style.background = isAlreadySelected ? '#dcfce7' : '#f8fafc'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = isAlreadySelected ? '#f0fdf4' : '#ffffff'}
                           >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                               <span style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.875rem' }}>
                                 <span style={{ color: '#2563eb' }}>[{a.code}]</span> {a.name}
                               </span>
-                              <span className="badge badge-info" style={{ fontSize: '0.7rem' }}>
-                                {a.departmentName || 'Chưa gán đơn vị'}
-                              </span>
+                              <div style={{ display: 'flex', gap: 12, fontSize: '0.75rem', color: '#64748b' }}>
+                                <span>🏢 {a.departmentName || 'Chưa gán đơn vị'}</span>
+                                <span>📍 {a.locationPath || 'Chưa xếp'}</span>
+                                <span>👤 {a.currentUser || a.responsiblePerson || 'N/A'}</span>
+                              </div>
                             </div>
-                            <div style={{ display: 'flex', gap: 12, fontSize: '0.775rem', color: '#64748b' }}>
-                              <span>📍 Vị trí: <strong>{a.locationPath || 'Chưa xếp'}</strong></span>
-                              <span>👤 Người giữ: <strong>{a.currentUser || a.responsiblePerson || 'N/A'}</strong></span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{
+                                background: '#fef3c7',
+                                color: '#b45309',
+                                fontSize: '0.7rem',
+                                padding: '2px 6px',
+                                borderRadius: 4,
+                                fontWeight: 600
+                              }}>
+                                Có: {a.quantity || 1} {a.unit || 'cái'}
+                              </span>
+                              <button
+                                type="button"
+                                className="btn btn-sm"
+                                style={{
+                                  background: isAlreadySelected ? '#16a34a' : '#2563eb',
+                                  color: '#fff',
+                                  padding: '4px 8px',
+                                  fontSize: '0.75rem'
+                                }}
+                              >
+                                {isAlreadySelected ? '✓ Đã thêm (+1)' : '+ Chọn'}
+                              </button>
                             </div>
                           </div>
-                        ))
-                      )}
-                    </div>
-                  )}
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Bảng danh sách tài sản điều chuyển đã chọn */}
+            <div className="form-group">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <label className="form-label" style={{ marginBottom: 0, fontWeight: 700 }}>
+                  Danh sách tài sản cần điều chuyển ({selectedItems.length})
+                </label>
+                {selectedItems.length > 0 && (
+                  <div style={{
+                    background: '#ecfdf5',
+                    color: '#065f46',
+                    border: '1px solid #a7f3d0',
+                    borderRadius: 20,
+                    padding: '3px 12px',
+                    fontSize: '0.8rem',
+                    fontWeight: 700
+                  }}>
+                    Đã chọn: {selectedItems.length} tài sản • Tổng SL điều chuyển: {selectedItems.reduce((s, i) => s + i.quantity, 0)} cái
+                  </div>
+                )}
+              </div>
+
+              {selectedItems.length === 0 ? (
+                <div style={{
+                  border: '2px dashed #cbd5e1',
+                  borderRadius: 8,
+                  padding: '24px',
+                  textAlign: 'center',
+                  color: '#64748b',
+                  background: '#f8fafc'
+                }}>
+                  <p style={{ margin: 0, fontSize: '0.9rem' }}>
+                    Chưa có tài sản nào được chọn điều chuyển. Vui lòng tìm kiếm và bấm <strong>+ Chọn</strong> ở trên.
+                  </p>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.775rem', color: '#94a3b8' }}>
+                    (Có thể điều chuyển cùng lúc nhiều tài sản và điều chỉnh số lượng cho từng tài sản)
+                  </p>
                 </div>
               ) : (
-                /* Card thông tin chi tiết tài sản đã chọn */
                 <div style={{
-                  background: '#f0fdf4',
-                  border: '1px solid #bbf7d0',
-                  borderRadius: '8px',
-                  padding: '12px 16px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 6
+                  border: '1px solid #e2e8f0',
+                  borderRadius: 8,
+                  overflow: 'hidden',
+                  maxHeight: 280,
+                  overflowY: 'auto'
                 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ fontWeight: 700, color: '#166534', fontSize: '0.95rem' }}>
-                      <span style={{ color: '#047857', background: '#d1fae5', padding: '2px 6px', borderRadius: 4, marginRight: 6 }}>
-                        {targetAsset.code}
-                      </span>
-                      {targetAsset.name}
-                    </div>
-                    <span className="badge badge-success" style={{ fontSize: '0.75rem' }}>Đã chọn</span>
-                  </div>
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-                    gap: '6px 12px',
-                    fontSize: '0.825rem',
-                    color: '#374151',
-                    marginTop: 4,
-                    paddingTop: 6,
-                    borderTop: '1px dashed #86efac'
-                  }}>
-                    <div><strong>🏢 Đơn vị hiện tại:</strong> {targetAsset.departmentName}</div>
-                    <div><strong>📍 Vị trí hiện tại:</strong> {targetAsset.locationPath || 'Chưa cập nhật'}</div>
-                    <div><strong>👤 Người bàn giao:</strong> {targetAsset.currentUser || targetAsset.responsiblePerson || 'Chưa có'}</div>
-                    <div><strong>🏷️ Nhãn hiệu / Model:</strong> {targetAsset.brand || 'N/A'}</div>
-                  </div>
+                  <table className="table" style={{ margin: 0, fontSize: '0.825rem' }}>
+                    <thead style={{ background: '#f8fafc', position: 'sticky', top: 0, zIndex: 10 }}>
+                      <tr>
+                        <th style={{ width: '40px', textAlign: 'center' }}>#</th>
+                        <th>Mã & Tên tài sản</th>
+                        <th>Vị trí hiện tại</th>
+                        <th>Người bàn giao</th>
+                        <th style={{ textAlign: 'center', width: '190px' }}>Số lượng chuyển</th>
+                        <th style={{ width: '50px', textAlign: 'center' }}>Xóa</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedItems.map((item, index) => (
+                        <tr key={item.assetId}>
+                          <td style={{ textAlign: 'center', color: '#64748b' }}>{index + 1}</td>
+                          <td>
+                            <div style={{ fontWeight: 600, color: '#1e293b' }}>{item.assetName}</div>
+                            <div style={{ fontSize: '0.75rem', color: '#2563eb', fontFamily: 'monospace' }}>
+                              {item.assetCode}
+                            </div>
+                          </td>
+                          <td>
+                            <div style={{ fontSize: '0.775rem', color: '#475569' }}>{item.departmentName}</div>
+                            <div style={{ fontSize: '0.725rem', color: '#64748b' }}>{item.fromLocation}</div>
+                          </td>
+                          <td>
+                            <div style={{ fontSize: '0.8rem', color: '#334155' }}>{item.fromUser || 'Chưa gán'}</div>
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                style={{ padding: '2px 8px', fontWeight: 700, height: 26 }}
+                                onClick={() => handleUpdateItemQuantity(item.assetId, -1)}
+                                disabled={item.quantity <= 1}
+                              >
+                                -
+                              </button>
+                              <input
+                                type="number"
+                                className="form-input"
+                                style={{
+                                  width: '55px',
+                                  textAlign: 'center',
+                                  padding: '2px 4px',
+                                  fontWeight: 700,
+                                  height: 26
+                                }}
+                                min={1}
+                                max={item.maxQuantity}
+                                value={item.quantity}
+                                onChange={(e) => handleUpdateItemQuantity(item.assetId, e.target.value, true)}
+                              />
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                style={{ padding: '2px 8px', fontWeight: 700, height: 26 }}
+                                onClick={() => handleUpdateItemQuantity(item.assetId, 1)}
+                                disabled={item.quantity >= item.maxQuantity}
+                              >
+                                +
+                              </button>
+                              {item.maxQuantity > 1 && (
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary btn-sm"
+                                  style={{ padding: '2px 6px', fontSize: '0.7rem', height: 26, whiteSpace: 'nowrap' }}
+                                  onClick={() => handleUpdateItemQuantity(item.assetId, item.maxQuantity, true)}
+                                  title={`Chọn tối đa ${item.maxQuantity}`}
+                                >
+                                  Tất cả ({item.maxQuantity})
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveItem(item.assetId)}
+                              style={{
+                                border: 'none',
+                                background: 'transparent',
+                                color: '#ef4444',
+                                cursor: 'pointer',
+                                padding: 4
+                              }}
+                              title="Xóa khỏi danh sách"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
@@ -601,38 +797,105 @@ export default function AssetTransfer() {
 
             <p>Hôm nay, đại diện các bên tiến hành bàn giao và tiếp nhận tài sản cố định như sau:</p>
 
-            <table style={{ marginTop: '16px' }}>
-              <tbody>
-                <tr>
-                  <td style={{ width: '30%', fontWeight: 'bold' }}>Tên tài sản:</td>
-                  <td><strong>{selectedPrintTransfer.assetName}</strong></td>
-                </tr>
-                <tr>
-                  <td style={{ fontWeight: 'bold' }}>Mã định danh tài sản:</td>
-                  <td>{selectedPrintTransfer.assetCode}</td>
-                </tr>
-                <tr>
-                  <td style={{ fontWeight: 'bold' }}>Bên giao (Đơn vị cũ):</td>
-                  <td>{selectedPrintTransfer.fromDepartmentName} ({selectedPrintTransfer.fromLocation})</td>
-                </tr>
-                <tr>
-                  <td style={{ fontWeight: 'bold' }}>Đại diện bên giao:</td>
-                  <td>{selectedPrintTransfer.sender}</td>
-                </tr>
-                <tr>
-                  <td style={{ fontWeight: 'bold' }}>Bên nhận (Đơn vị mới):</td>
-                  <td>{selectedPrintTransfer.toDepartmentName} ({selectedPrintTransfer.toLocation})</td>
-                </tr>
-                <tr>
-                  <td style={{ fontWeight: 'bold' }}>Đại diện bên nhận:</td>
-                  <td>{selectedPrintTransfer.receiver}</td>
-                </tr>
-                <tr>
-                  <td style={{ fontWeight: 'bold' }}>Lý do điều chuyển:</td>
-                  <td>{selectedPrintTransfer.reason}</td>
-                </tr>
-              </tbody>
-            </table>
+            {selectedPrintTransfer.items && selectedPrintTransfer.items.length > 1 ? (
+              <>
+                <table style={{ marginTop: '16px', marginBottom: '16px' }}>
+                  <tbody>
+                    <tr>
+                      <td style={{ width: '25%', fontWeight: 'bold' }}>Bên giao (Đơn vị cũ):</td>
+                      <td>{selectedPrintTransfer.fromDepartmentName} ({selectedPrintTransfer.fromLocation})</td>
+                      <td style={{ width: '20%', fontWeight: 'bold' }}>Đại diện bên giao:</td>
+                      <td>{selectedPrintTransfer.sender}</td>
+                    </tr>
+                    <tr>
+                      <td style={{ fontWeight: 'bold' }}>Bên nhận (Đơn vị mới):</td>
+                      <td>{selectedPrintTransfer.toDepartmentName} ({selectedPrintTransfer.toLocation})</td>
+                      <td style={{ fontWeight: 'bold' }}>Đại diện bên nhận:</td>
+                      <td>{selectedPrintTransfer.receiver}</td>
+                    </tr>
+                    <tr>
+                      <td style={{ fontWeight: 'bold' }}>Lý do điều chuyển:</td>
+                      <td colSpan="3">{selectedPrintTransfer.reason}</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                <div style={{ fontWeight: 'bold', margin: '14px 0 8px', fontSize: '13px', textTransform: 'uppercase' }}>
+                  DANH MỤC CHI TIẾT TÀI SẢN ĐIỀU CHUYỂN ({selectedPrintTransfer.items.length} TÀI SẢN):
+                </div>
+
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12px' }}>
+                  <thead>
+                    <tr style={{ background: '#f1f5f9' }}>
+                      <th style={{ border: '1px solid #333', padding: '6px', textAlign: 'center', width: '35px' }}>STT</th>
+                      <th style={{ border: '1px solid #333', padding: '6px', width: '100px' }}>Mã TS</th>
+                      <th style={{ border: '1px solid #333', padding: '6px' }}>Tên tài sản</th>
+                      <th style={{ border: '1px solid #333', padding: '6px', textAlign: 'center', width: '60px' }}>ĐVT</th>
+                      <th style={{ border: '1px solid #333', padding: '6px', textAlign: 'center', width: '70px' }}>Số lượng</th>
+                      <th style={{ border: '1px solid #333', padding: '6px' }}>Vị trí / Đơn vị ban đầu</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedPrintTransfer.items.map((it, idx) => (
+                      <tr key={idx}>
+                        <td style={{ border: '1px solid #333', padding: '6px', textAlign: 'center' }}>{idx + 1}</td>
+                        <td style={{ border: '1px solid #333', padding: '6px', fontFamily: 'monospace' }}>{it.assetCode}</td>
+                        <td style={{ border: '1px solid #333', padding: '6px', fontWeight: 'bold' }}>{it.assetName}</td>
+                        <td style={{ border: '1px solid #333', padding: '6px', textAlign: 'center' }}>{it.unit || 'cái'}</td>
+                        <td style={{ border: '1px solid #333', padding: '6px', textAlign: 'center', fontWeight: 'bold' }}>{it.quantity}</td>
+                        <td style={{ border: '1px solid #333', padding: '6px', fontSize: '11px' }}>
+                          {it.departmentName} {it.fromLocation ? `(${it.fromLocation})` : ''}
+                        </td>
+                      </tr>
+                    ))}
+                    <tr style={{ fontWeight: 'bold', background: '#f8fafc' }}>
+                      <td colSpan="4" style={{ border: '1px solid #333', padding: '6px', textAlign: 'right' }}>TỔNG CỘNG:</td>
+                      <td style={{ border: '1px solid #333', padding: '6px', textAlign: 'center' }}>
+                        {selectedPrintTransfer.items.reduce((s, i) => s + (Number(i.quantity) || 1), 0)}
+                      </td>
+                      <td style={{ border: '1px solid #333', padding: '6px' }}></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </>
+            ) : (
+              <table style={{ marginTop: '16px' }}>
+                <tbody>
+                  <tr>
+                    <td style={{ width: '30%', fontWeight: 'bold' }}>Tên tài sản:</td>
+                    <td><strong>{selectedPrintTransfer.assetName}</strong></td>
+                  </tr>
+                  <tr>
+                    <td style={{ fontWeight: 'bold' }}>Mã định danh tài sản:</td>
+                    <td>{selectedPrintTransfer.assetCode}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ fontWeight: 'bold' }}>Số lượng điều chuyển:</td>
+                    <td><strong>{selectedPrintTransfer.quantity || 1} {selectedPrintTransfer.unit || 'cái'}</strong></td>
+                  </tr>
+                  <tr>
+                    <td style={{ fontWeight: 'bold' }}>Bên giao (Đơn vị cũ):</td>
+                    <td>{selectedPrintTransfer.fromDepartmentName} ({selectedPrintTransfer.fromLocation})</td>
+                  </tr>
+                  <tr>
+                    <td style={{ fontWeight: 'bold' }}>Đại diện bên giao:</td>
+                    <td>{selectedPrintTransfer.sender}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ fontWeight: 'bold' }}>Bên nhận (Đơn vị mới):</td>
+                    <td>{selectedPrintTransfer.toDepartmentName} ({selectedPrintTransfer.toLocation})</td>
+                  </tr>
+                  <tr>
+                    <td style={{ fontWeight: 'bold' }}>Đại diện bên nhận:</td>
+                    <td>{selectedPrintTransfer.receiver}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ fontWeight: 'bold' }}>Lý do điều chuyển:</td>
+                    <td>{selectedPrintTransfer.reason}</td>
+                  </tr>
+                </tbody>
+              </table>
+            )}
 
             <div className="signatures">
               <div className="sig-block">
