@@ -1,5 +1,5 @@
 // src/pages/Dashboard.jsx
-import React, { useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAssets } from '../context/AssetContext';
 import { useAuth } from '../context/AuthContext';
 import { formatVND } from '../utils/formatters';
@@ -54,6 +54,10 @@ export default function Dashboard({ setActiveTab }) {
   const { assets, departments, alerts } = useAssets();
   const { currentUser, permissions } = useAuth();
 
+  // Chế độ lọc và hiển thị biểu đồ phòng ban
+  const [deptFilter, setDeptFilter] = useState('hasAssets'); // 'hasAssets' | 'top10' | 'all'
+  const [deptChartType, setDeptChartType] = useState('horizontal'); // 'horizontal' | 'vertical'
+
   // Dữ liệu tài sản theo phạm vi tài khoản (Super Admin: toàn trường, QL phòng: phòng mình)
   const scopedAssets = useMemo(() => {
     if (permissions?.isSuperAdmin) return assets;
@@ -77,32 +81,139 @@ export default function Dashboard({ setActiveTab }) {
   const totalValue = scopedAssets.reduce((sum, a) => sum + ((Number(a.cost) || 0) * (Number(a.quantity) || 1)), 0);
 
   // 2. Thống kê theo phòng (so sánh chuẩn hóa)
-  const deptStats = departments.map(dept => {
-    const deptAssets = scopedAssets.filter(a =>
-      cleanText(a.departmentId).toLowerCase() === cleanText(dept.id).toLowerCase() ||
-      cleanText(a.departmentName).toLowerCase() === cleanText(dept.name).toLowerCase()
-    );
-    const count = deptAssets.reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
-    const value = deptAssets.reduce((sum, a) => sum + ((Number(a.cost) || 0) * (Number(a.quantity) || 1)), 0);
-    return {
-      ...dept,
-      count,
-      value
-    };
-  });
+  const deptStats = useMemo(() => {
+    return departments.map(dept => {
+      const deptAssets = scopedAssets.filter(a =>
+        cleanText(a.departmentId).toLowerCase() === cleanText(dept.id).toLowerCase() ||
+        cleanText(a.departmentName).toLowerCase() === cleanText(dept.name).toLowerCase()
+      );
+      const count = deptAssets.reduce((sum, a) => sum + (Number(a.quantity) || 1), 0);
+      const value = deptAssets.reduce((sum, a) => sum + ((Number(a.cost) || 0) * (Number(a.quantity) || 1)), 0);
+      return {
+        ...dept,
+        count,
+        value
+      };
+    });
+  }, [departments, scopedAssets]);
 
-  // 3. Biểu đồ 1: Tài sản theo phòng (Bar)
-  const chartDeptData = {
-    labels: deptStats.map(d => d.name || d.code),
-    datasets: [
-      {
-        label: 'Số lượng tài sản',
-        data: deptStats.map(d => d.count),
-        backgroundColor: '#3b82f6',
-        borderRadius: 6,
+  // Lọc và sắp xếp phòng ban giảm dần theo số lượng tài sản
+  const filteredDeptStats = useMemo(() => {
+    const list = [...deptStats].sort((a, b) => b.count - a.count);
+    if (deptFilter === 'top10') {
+      return list.slice(0, 10);
+    }
+    if (deptFilter === 'hasAssets') {
+      const withAssets = list.filter(d => d.count > 0);
+      return withAssets.length > 0 ? withAssets : list;
+    }
+    return list; // 'all'
+  }, [deptStats, deptFilter]);
+
+  // 3. Biểu đồ 1: Dữ liệu Tài sản theo phòng
+  const chartDeptData = useMemo(() => {
+    return {
+      labels: filteredDeptStats.map(d => d.name || d.code || 'Chưa đặt tên'),
+      datasets: [
+        {
+          label: 'Số lượng tài sản',
+          data: filteredDeptStats.map(d => d.count),
+          backgroundColor: '#3b82f6',
+          hoverBackgroundColor: '#2563eb',
+          borderRadius: 6,
+          maxBarThickness: 28,
+        }
+      ]
+    };
+  }, [filteredDeptStats]);
+
+  // Cấu hình tuỳ biến biểu đồ phòng ban (Hỗ trợ thanh ngang chống đè chữ + cột đứng)
+  const chartDeptOptions = useMemo(() => {
+    const isHorizontal = deptChartType === 'horizontal';
+    return {
+      responsive: true,
+      maintainAspectRatio: false,
+      indexAxis: isHorizontal ? 'y' : 'x',
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#0f172a',
+          titleFont: { size: 12, weight: 'bold' },
+          bodyFont: { size: 11 },
+          padding: 10,
+          cornerRadius: 8,
+          callbacks: {
+            title: (items) => {
+              if (!items.length) return '';
+              const idx = items[0].dataIndex;
+              const d = filteredDeptStats[idx];
+              return d ? `${d.name} (${d.code || 'Mã: N/A'})` : items[0].label;
+            },
+            label: (ctx) => {
+              const d = filteredDeptStats[ctx.dataIndex];
+              const valStr = d && d.value > 0 ? ` • ${formatVND(d.value)}` : '';
+              const count = d?.count ?? (isHorizontal ? ctx.parsed.x : ctx.parsed.y);
+              return ` Số lượng: ${count.toLocaleString('vi-VN')} tài sản${valStr}`;
+            }
+          }
+        }
+      },
+      scales: isHorizontal ? {
+        x: {
+          beginAtZero: true,
+          grid: { color: '#f1f5f9' },
+          ticks: {
+            precision: 0,
+            font: { size: 11 }
+          }
+        },
+        y: {
+          grid: { display: false },
+          ticks: {
+            font: { size: 11, weight: 500 },
+            color: '#334155',
+            autoSkip: false,
+            callback: function(val, index) {
+              const d = filteredDeptStats[index];
+              const name = d ? (d.name || d.code) : this.getLabelForValue(val);
+              return name.length > 24 ? name.substring(0, 22) + '…' : name;
+            }
+          }
+        }
+      } : {
+        x: {
+          grid: { display: false },
+          ticks: {
+            autoSkip: true,
+            maxRotation: 35,
+            minRotation: 0,
+            font: { size: 10 },
+            color: '#475569',
+            callback: function(val, index) {
+              const d = filteredDeptStats[index];
+              const name = d ? (d.name || d.code) : this.getLabelForValue(val);
+              return name.length > 14 ? name.substring(0, 12) + '…' : name;
+            }
+          }
+        },
+        y: {
+          beginAtZero: true,
+          grid: { color: '#f1f5f9' },
+          ticks: {
+            precision: 0,
+            font: { size: 11 }
+          }
+        }
       }
-    ]
-  };
+    };
+  }, [deptChartType, filteredDeptStats]);
+
+  const chartHeight = useMemo(() => {
+    if (deptChartType === 'horizontal') {
+      return Math.max(270, filteredDeptStats.length * 28 + 35);
+    }
+    return 270;
+  }, [deptChartType, filteredDeptStats.length]);
 
   // 4. Biểu đồ 2: Tài sản theo loại (Doughnut)
   const typeMap = {};
@@ -355,10 +466,141 @@ export default function Dashboard({ setActiveTab }) {
       <div className="dashboard-grid-2">
         {/* Biểu đồ theo phòng */}
         <div className="card">
-          <h3 className="card-title">
-            <span>Tài sản theo Phòng/Ban & Khoa</span>
-            <Building size={18} color="#64748b" />
-          </h3>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 8,
+            marginBottom: 12
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Building size={18} color="#1e3a8a" />
+              <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#0f172a' }}>
+                Tài sản theo Phòng/Ban & Khoa
+              </span>
+              <span style={{
+                fontSize: '0.72rem',
+                padding: '2px 8px',
+                borderRadius: '12px',
+                background: '#eff6ff',
+                color: '#2563eb',
+                fontWeight: 600
+              }}>
+                {filteredDeptStats.length}/{deptStats.length} phòng
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              {/* Lọc danh sách */}
+              <div style={{
+                display: 'inline-flex',
+                background: '#f1f5f9',
+                padding: '2px',
+                borderRadius: '6px',
+                fontSize: '0.75rem'
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setDeptFilter('hasAssets')}
+                  style={{
+                    padding: '3px 8px',
+                    borderRadius: '4px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontWeight: deptFilter === 'hasAssets' ? 700 : 500,
+                    background: deptFilter === 'hasAssets' ? '#ffffff' : 'transparent',
+                    color: deptFilter === 'hasAssets' ? '#1e3a8a' : '#64748b',
+                    boxShadow: deptFilter === 'hasAssets' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+                    transition: 'all 150ms'
+                  }}
+                >
+                  Có tài sản
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeptFilter('top10')}
+                  style={{
+                    padding: '3px 8px',
+                    borderRadius: '4px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontWeight: deptFilter === 'top10' ? 700 : 500,
+                    background: deptFilter === 'top10' ? '#ffffff' : 'transparent',
+                    color: deptFilter === 'top10' ? '#1e3a8a' : '#64748b',
+                    boxShadow: deptFilter === 'top10' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+                    transition: 'all 150ms'
+                  }}
+                >
+                  Top 10
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeptFilter('all')}
+                  style={{
+                    padding: '3px 8px',
+                    borderRadius: '4px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontWeight: deptFilter === 'all' ? 700 : 500,
+                    background: deptFilter === 'all' ? '#ffffff' : 'transparent',
+                    color: deptFilter === 'all' ? '#1e3a8a' : '#64748b',
+                    boxShadow: deptFilter === 'all' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+                    transition: 'all 150ms'
+                  }}
+                >
+                  Tất cả
+                </button>
+              </div>
+
+              {/* Chuyển kiểu biểu đồ: Ngang / Dọc */}
+              <div style={{
+                display: 'inline-flex',
+                background: '#f1f5f9',
+                padding: '2px',
+                borderRadius: '6px',
+                fontSize: '0.75rem'
+              }}>
+                <button
+                  type="button"
+                  title="Biểu đồ thanh ngang (dễ đọc tên phòng dài)"
+                  onClick={() => setDeptChartType('horizontal')}
+                  style={{
+                    padding: '3px 8px',
+                    borderRadius: '4px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontWeight: deptChartType === 'horizontal' ? 700 : 500,
+                    background: deptChartType === 'horizontal' ? '#ffffff' : 'transparent',
+                    color: deptChartType === 'horizontal' ? '#1e3a8a' : '#64748b',
+                    boxShadow: deptChartType === 'horizontal' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+                    transition: 'all 150ms'
+                  }}
+                >
+                  Ngang
+                </button>
+                <button
+                  type="button"
+                  title="Biểu đồ cột đứng"
+                  onClick={() => setDeptChartType('vertical')}
+                  style={{
+                    padding: '3px 8px',
+                    borderRadius: '4px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontWeight: deptChartType === 'vertical' ? 700 : 500,
+                    background: deptChartType === 'vertical' ? '#ffffff' : 'transparent',
+                    color: deptChartType === 'vertical' ? '#1e3a8a' : '#64748b',
+                    boxShadow: deptChartType === 'vertical' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+                    transition: 'all 150ms'
+                  }}
+                >
+                  Dọc
+                </button>
+              </div>
+            </div>
+          </div>
+
           {deptStats.length === 0 ? (
             <div style={{
               height: '270px',
@@ -387,46 +629,17 @@ export default function Dashboard({ setActiveTab }) {
               </button>
             </div>
           ) : (
-            <div style={{ height: '270px' }}>
-              <Bar 
-                data={chartDeptData} 
-                options={{
-                  responsive: true,
-                  maintainAspectRatio: false,
-                  plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                      callbacks: {
-                        title: (items) => {
-                          if (!items.length) return '';
-                          const idx = items[0].dataIndex;
-                          const d = deptStats[idx];
-                          return d ? `${d.name} (${d.code})` : items[0].label;
-                        },
-                        label: (ctx) => {
-                          const d = deptStats[ctx.dataIndex];
-                          const valStr = d && d.value > 0 ? ` - ${formatVND(d.value)}` : '';
-                          return ` Số lượng: ${ctx.parsed.y} tài sản${valStr}`;
-                        }
-                      }
-                    }
-                  },
-                  scales: {
-                    x: {
-                      ticks: {
-                        autoSkip: false,
-                        maxRotation: 40,
-                        minRotation: 0,
-                        font: { size: 11 }
-                      }
-                    },
-                    y: {
-                      beginAtZero: true,
-                      ticks: { precision: 0 }
-                    }
-                  }
-                }} 
-              />
+            <div style={{
+              height: '270px',
+              overflowY: deptChartType === 'horizontal' && chartHeight > 270 ? 'auto' : 'hidden',
+              paddingRight: 4
+            }}>
+              <div style={{ height: `${chartHeight}px`, minHeight: '270px', position: 'relative' }}>
+                <Bar 
+                  data={chartDeptData} 
+                  options={chartDeptOptions} 
+                />
+              </div>
             </div>
           )}
         </div>
