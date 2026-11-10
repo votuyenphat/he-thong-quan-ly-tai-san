@@ -12,35 +12,29 @@ export const LEVEL_TYPES = {
 // Check if an asset locationPath belongs to a specific location node
 export function isAssetAtLocation(assetLoc, nodeFullPath, nodeName) {
   if (!assetLoc || typeof assetLoc !== 'string') return false;
-  const a = cleanText(assetLoc).toLowerCase();
-  const f = cleanText(nodeFullPath).toLowerCase();
+  if (!nodeFullPath || typeof nodeFullPath !== 'string') return false;
+
+  const a = cleanText(assetLoc).replace(/\s*;\s*/g, ' > ').toLowerCase();
+  const f = cleanText(nodeFullPath).replace(/\s*;\s*/g, ' > ').toLowerCase();
   if (!a || !f) return false;
 
-  // 1. So khớp chính xác
+  // 1. So khớp chính xác toàn bộ đường dẫn
   if (a === f) return true;
 
-  // 2. So khớp tiền tố phân cấp: e.g. "cơ sở 1 > khu a > tầng 1" bắt đầu bằng "cơ sở 1 > khu a >"
+  // 2. So khớp tiền tố phân cấp: e.g. "cơ sở chính > khu a > tầng 1" bắt đầu bằng "cơ sở chính > khu a"
   if (a.startsWith(`${f} >`)) return true;
 
-  // 3. Tách theo dấu '>' để kiểm tra từng phân cấp chính xác tuyệt đối
+  // 3. Tách theo dấu '>' để kiểm tra từng phân cấp chính xác tuyệt đối từ gốc xuống
   const aParts = a.split(/\s*>\s*/).map(p => cleanText(p)).filter(Boolean);
   const fParts = f.split(/\s*>\s*/).map(p => cleanText(p)).filter(Boolean);
 
   if (fParts.length > 0 && aParts.length >= fParts.length) {
-    let match = true;
     for (let i = 0; i < fParts.length; i++) {
       if (aParts[i] !== fParts[i]) {
-        match = false;
-        break;
+        return false;
       }
     }
-    if (match) return true;
-  }
-
-  // 4. Fallback: Nếu là cấp phòng cuối cùng, so khớp chính xác tên phân đoạn
-  if (nodeName) {
-    const n = cleanText(nodeName).toLowerCase();
-    if (aParts.includes(n)) return true;
+    return true;
   }
 
   return false;
