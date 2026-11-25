@@ -15,6 +15,8 @@ import {
   History,
   ShieldAlert,
   Users,
+  Camera,
+  Tags,
   X
 } from 'lucide-react';
 
@@ -23,10 +25,12 @@ export default function Sidebar({ activeTab, setActiveTab, mobileOpen, onClose }
   const { alerts } = useAssets();
 
   const totalAlerts = 
-    alerts.wrongLocation.length + 
-    alerts.missing.length + 
-    alerts.pendingLiquidation.length + 
-    alerts.expiringSoon.length;
+    (alerts?.wrongLocation?.length || 0) + 
+    (alerts?.missing?.length || 0) + 
+    (alerts?.pendingLiquidation?.length || 0) + 
+    (alerts?.expiringSoon?.length || 0) +
+    (alerts?.obsoleteTraining?.length || 0) +
+    (alerts?.damagedNeedsRepair?.length || 0);
 
   const menuSections = [
     {
@@ -47,6 +51,8 @@ export default function Sidebar({ activeTab, setActiveTab, mobileOpen, onClose }
       items: [
         { id: 'assets', label: 'Danh mục Tài sản', icon: Boxes, visible: true },
         { id: 'inbound', label: 'Nhập tài sản mới', icon: PlusCircle, visible: permissions.canCreateAsset },
+        { id: 'inventory', label: 'Kiểm kê & Quét QR', icon: Camera, visible: true },
+        { id: 'inventory-slips', label: 'Tạo phiếu kiểm kê', icon: Tags, visible: true },
         { id: 'transfer', label: 'Điều chuyển tài sản', icon: ArrowLeftRight, visible: true },
         { id: 'recall', label: 'Thu hồi tài sản', icon: RotateCcw, visible: permissions.isSuperAdmin || permissions.canProposeRecall },
         { id: 'liquidation', label: 'Thanh lý tài sản', icon: Trash2, visible: permissions.isSuperAdmin || permissions.canProposeLiquidation }

@@ -55,13 +55,39 @@ export default function CameraScanner({ isOpen, onClose, onScanSuccess }) {
       const parsed = JSON.parse(text);
       if (parsed.code) targetCode = parsed.code;
     } catch (e) {
-      // It's raw text
+      // Nếu mã QR chứa đường dẫn URL hình ảnh tài sản (?card=TS-... hoặc ?asset=TS-...) -> lấy mã tài sản
+      if (/^https?:\/\//i.test(text.trim())) {
+        try {
+          const urlObj = new URL(text.trim());
+          const assetParam = urlObj.searchParams.get('card') || urlObj.searchParams.get('asset');
+          if (assetParam) targetCode = assetParam;
+        } catch {
+          // ignore invalid URL
+        }
+      }
     }
 
-    const matchedAsset = assets.find(a => 
+    let matchedAsset = assets.find(a => 
       a.code.toLowerCase() === targetCode.trim().toLowerCase() ||
       a.qrValue === targetCode.trim()
     );
+
+    // Hỗ trợ nhận diện trực tiếp khi quét Mã QR trên Tem Kiểm Kê Tài Sản (chứa "Tên TS: ... ; SL: ...")
+    if (!matchedAsset && text.includes('Tên TS:')) {
+      const nameMatch = text.match(/Tên TS:\s*(.+?)\s*;\s*SL:/i);
+      const locMatch = text.match(/Vị trí:\s*(.+?)(?:\r?\n|$)/i);
+      const scannedName = nameMatch ? nameMatch[1].trim().toLowerCase() : '';
+      const scannedLoc = locMatch ? locMatch[1].trim().toLowerCase() : '';
+
+      if (scannedName) {
+        matchedAsset = assets.find(a => {
+          const sameName = (a.name || '').trim().toLowerCase() === scannedName;
+          if (!sameName) return false;
+          if (!scannedLoc || scannedLoc === '---') return true;
+          return (a.locationPath || '').toLowerCase().includes(scannedLoc);
+        }) || assets.find(a => (a.name || '').trim().toLowerCase() === scannedName);
+      }
+    }
 
     if (matchedAsset) {
       if (scannerRef.current) {

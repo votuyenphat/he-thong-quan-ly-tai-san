@@ -35,7 +35,7 @@ import {
 
 const AssetContext = createContext();
 
-const DATA_VERSION = 'v3-empty'; // Bump this to reset all stored data
+const DATA_VERSION = 'v4-training-ready'; // Bump this to reset all stored data
 
 export function AssetProvider({ children }) {
   const { currentUser } = useAuth();
@@ -1313,6 +1313,30 @@ export function AssetProvider({ children }) {
       const expireYear = purchaseYear + Number(a.lifespanYears);
       const currentYear = new Date().getFullYear();
       return expireYear <= currentYear + 1 && canonicalStatus(a.status) !== 'Đã thanh lý';
+    }),
+    obsoleteTraining: assets.filter(a => {
+      if (canonicalStatus(a.status) === 'Đã thanh lý') return false;
+      const suit = a.trainingSuitability || '';
+      if (suit === 'Lạc hậu / Không phù hợp đào tạo' || a.isObsoleteForTraining === true) return true;
+      if (canonicalCondition(a.condition) === 'Không sử dụng được') return true;
+      // Nếu đã hết hạn sử dụng và tình trạng là Hỏng nặng
+      if (a.lifespanYears && Number(a.lifespanYears) > 0) {
+        const rawYear = a.purchaseYear || a.importYear || (a.purchaseDate ? new Date(a.purchaseDate).getFullYear() : null);
+        if (rawYear) {
+          const currentYear = new Date().getFullYear();
+          if (Number(rawYear) + Number(a.lifespanYears) < currentYear && canonicalCondition(a.condition) === 'Hỏng nặng') {
+            return true;
+          }
+        }
+      }
+      return false;
+    }),
+    damagedNeedsRepair: assets.filter(a => {
+      if (canonicalStatus(a.status) === 'Đã thanh lý' || canonicalStatus(a.status) === 'Chờ thanh lý') return false;
+      const cond = canonicalCondition(a.condition);
+      if (cond === 'Hỏng nặng' || cond === 'Hỏng nhẹ') return true;
+      if (a.maintenanceStatus === 'Hỏng chờ sửa chữa' || a.maintenanceStatus === 'Cần bảo trì') return true;
+      return false;
     })
   };
 

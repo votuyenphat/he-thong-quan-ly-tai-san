@@ -28,6 +28,7 @@ import {
   Building,
   TrendingUp,
   ShieldAlert,
+  GraduationCap,
   ArrowRight
 } from 'lucide-react';
 
@@ -305,12 +306,43 @@ export default function Dashboard({ setActiveTab }) {
     ]
   };
 
-  // 5 Cảnh báo nghiệp vụ tài sản
+  // 8. Biểu đồ 6: Mức độ tương thích với Chương trình Đào tạo
+  const trainingGroups = {
+    'Phù hợp đào tạo': 0,
+    'Cần nâng cấp': 0,
+    'Lạc hậu / Không phù hợp': 0
+  };
+  scopedAssets.forEach(a => {
+    const qty = Number(a.quantity) || 1;
+    if (a.trainingSuitability === 'Lạc hậu / Không phù hợp đào tạo' || a.isObsoleteForTraining || canonicalCondition(a.condition) === 'Không sử dụng được') {
+      trainingGroups['Lạc hậu / Không phù hợp'] += qty;
+    } else if (a.trainingSuitability === 'Cần nâng cấp' || canonicalCondition(a.condition) === 'Hỏng nhẹ') {
+      trainingGroups['Cần nâng cấp'] += qty;
+    } else {
+      trainingGroups['Phù hợp đào tạo'] += qty;
+    }
+  });
+
+  const chartTrainingData = {
+    labels: Object.keys(trainingGroups),
+    datasets: [
+      {
+        data: Object.values(trainingGroups),
+        backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
+        borderWidth: 2,
+        borderColor: '#ffffff'
+      }
+    ]
+  };
+
+  // 6 Cảnh báo nghiệp vụ tài sản
   const alertCards = [
-    { title: 'Sai vị trí thực tế', count: alerts.wrongLocation.length, color: '#ea580c', bg: '#ffedd5', tab: 'alerts' },
-    { title: 'Không tìm thấy (Thất lạc)', count: alerts.missing.length, color: '#dc2626', bg: '#fee2e2', tab: 'alerts' },
-    { title: 'Đề nghị thanh lý chờ duyệt', count: alerts.pendingLiquidation.length, color: '#d97706', bg: '#fef3c7', tab: 'liquidation' },
-    { title: 'Sắp hết thời gian sử dụng', count: alerts.expiringSoon.length, color: '#7c3aed', bg: '#f5f3ff', tab: 'alerts' },
+    { title: 'Lạc hậu đào tạo', count: alerts?.obsoleteTraining?.length || 0, color: '#dc2626', bg: '#fee2e2', tab: 'alerts' },
+    { title: 'Hỏng cần sửa / bảo trì', count: alerts?.damagedNeedsRepair?.length || 0, color: '#ea580c', bg: '#ffedd5', tab: 'alerts' },
+    { title: 'Sắp hết hạn sử dụng', count: alerts?.expiringSoon?.length || 0, color: '#7c3aed', bg: '#f5f3ff', tab: 'alerts' },
+    { title: 'Chờ duyệt thanh lý', count: alerts?.pendingLiquidation?.length || 0, color: '#d97706', bg: '#fef3c7', tab: 'liquidation' },
+    { title: 'Sai vị trí thực tế', count: alerts?.wrongLocation?.length || 0, color: '#0284c7', bg: '#e0f2fe', tab: 'alerts' },
+    { title: 'Thất lạc (Mất)', count: alerts?.missing?.length || 0, color: '#991b1b', bg: '#fee2e2', tab: 'alerts' },
   ];
 
   return (
@@ -411,6 +443,24 @@ export default function Dashboard({ setActiveTab }) {
           </div>
           <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 4 }}>
             Đã thu hồi nộp quỹ
+          </div>
+        </div>
+
+        {/* Lạc hậu đào tạo */}
+        <div 
+          className="card" 
+          style={{ borderLeft: '4px solid #dc2626', cursor: 'pointer', background: '#fef2f2' }}
+          onClick={() => setActiveTab('alerts')}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.825rem', color: '#991b1b', fontWeight: 700 }}>Lạc hậu đào tạo</span>
+            <GraduationCap size={18} color="#dc2626" />
+          </div>
+          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#dc2626', marginTop: 8 }}>
+            {alerts?.obsoleteTraining?.length || 0}
+          </div>
+          <div style={{ fontSize: '0.75rem', color: '#b91c1c', marginTop: 4, fontWeight: 600 }}>
+            Cần thay thế / nâng cấp
           </div>
         </div>
       </div>
@@ -706,6 +756,26 @@ export default function Dashboard({ setActiveTab }) {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: { legend: { display: false } }
+              }} 
+            />
+          </div>
+        </div>
+
+        {/* Biểu đồ Mức độ Đáp ứng Đào tạo */}
+        <div className="card">
+          <h3 className="card-title">Mức độ Phù hợp Đào tạo</h3>
+          <div style={{ height: '240px', display: 'flex', justifyContent: 'center' }}>
+            <Doughnut 
+              data={chartTrainingData} 
+              options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: {
+                    position: 'bottom',
+                    labels: { boxWidth: 12, font: { size: 11 } }
+                  }
+                }
               }} 
             />
           </div>

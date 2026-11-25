@@ -23,19 +23,49 @@ import ReportsPage from './pages/ReportsPage';
 import AuditLogsPage from './pages/AuditLogsPage';
 import CategoryConfig from './pages/CategoryConfig';
 import UserManagement from './pages/UserManagement';
+import InventorySession from './pages/InventorySession';
+import InventorySlipGenerator from './pages/InventorySlipGenerator';
+import AssetPublicProfile from './pages/AssetPublicProfile';
 import ForcePasswordChangeModal from './components/common/ForcePasswordChangeModal';
+
+const VALID_TABS = new Set([
+  'dashboard', 'alerts', 'assets', 'inbound', 'inventory', 'inventory-slips',
+  'categories', 'transfer', 'recall', 'liquidation', 'departments', 'locations',
+  'reports', 'audit', 'users'
+]);
 
 function MainApplication() {
   const { isLoggedIn } = useAuth();
   const { alerts } = useAssets();
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTabState] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get('tab');
+    return tabParam && VALID_TABS.has(tabParam) ? tabParam : 'dashboard';
+  });
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  const setActiveTab = (nextTab) => {
+    setActiveTabState(nextTab);
+    try {
+      const url = new URL(window.location.href);
+      if (nextTab === 'dashboard') {
+        url.searchParams.delete('tab');
+      } else {
+        url.searchParams.set('tab', nextTab);
+      }
+      window.history.replaceState({}, '', url.toString());
+    } catch {
+      // ignore URL update errors
+    }
+  };
 
   const totalAlerts = 
     (alerts?.wrongLocation?.length || 0) + 
     (alerts?.missing?.length || 0) + 
     (alerts?.pendingLiquidation?.length || 0) + 
-    (alerts?.expiringSoon?.length || 0);
+    (alerts?.expiringSoon?.length || 0) +
+    (alerts?.obsoleteTraining?.length || 0) +
+    (alerts?.damagedNeedsRepair?.length || 0);
 
   if (!isLoggedIn) {
     return <LoginScreen />;
@@ -51,6 +81,10 @@ function MainApplication() {
         return <AssetList setActiveTab={setActiveTab} />;
       case 'inbound':
         return <AssetInbound setActiveTab={setActiveTab} />;
+      case 'inventory':
+        return <InventorySession setActiveTab={setActiveTab} />;
+      case 'inventory-slips':
+        return <InventorySlipGenerator />;
       case 'categories':
         return <CategoryConfig />;
       case 'transfer':
@@ -159,6 +193,14 @@ function MainApplication() {
 }
 
 export default function App() {
+  const params = new URLSearchParams(window.location.search);
+  const qrCardQuery = params.get('card') || params.get('asset');
+
+  // Khi quét Mã QR: chỉ hiển thị độc lập 1 hình ảnh thông tin tài sản duy nhất, hoàn toàn không mở vào Phần mềm
+  if (qrCardQuery) {
+    return <AssetPublicProfile assetQuery={qrCardQuery} />;
+  }
+
   return (
     <AuthProvider>
       <AssetProvider>

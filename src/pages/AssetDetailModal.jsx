@@ -17,7 +17,11 @@ import {
   DollarSign,
   Shield,
   Layers,
-  Clock
+  Clock,
+  GraduationCap,
+  Cpu,
+  AlertTriangle,
+  Wrench
 } from 'lucide-react';
 
 export default function AssetDetailModal({ isOpen, onClose, asset, onOpenQR }) {
@@ -106,6 +110,37 @@ export default function AssetDetailModal({ isOpen, onClose, asset, onOpenQR }) {
       {/* TAB 1: THÔNG TIN CHI TIẾT */}
       {activeTab === 'info' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {/* Cảnh báo thiết bị lạc hậu đào tạo nếu có */}
+          {(asset.trainingSuitability === 'Lạc hậu / Không phù hợp đào tạo' || asset.isObsoleteForTraining || asset.condition === 'Không sử dụng được') && (
+            <div style={{
+              background: '#fef2f2',
+              border: '2px solid #ef4444',
+              borderRadius: '10px',
+              padding: '14px 16px',
+              display: 'flex',
+              gap: 12,
+              alignItems: 'flex-start'
+            }}>
+              <AlertTriangle size={24} color="#dc2626" style={{ flexShrink: 0, marginTop: 2 }} />
+              <div>
+                <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#991b1b' }}>
+                  CẢNH BÁO: THIẾT BỊ LẠC HẬU / KHÔNG ĐÁP ỨNG CHUẨN ĐÀO TẠO
+                </div>
+                <div style={{ fontSize: '0.825rem', color: '#b91c1c', marginTop: 4 }}>
+                  <strong>Lý do:</strong> {asset.obsoleteReason || 'Thiết bị công nghệ cũ, cấu hình không đủ đáp ứng giáo trình thực hành mới của Nhà trường.'}
+                </div>
+                {asset.technicalSpecs && (
+                  <div style={{ fontSize: '0.8rem', color: '#7f1d1d', marginTop: 4 }}>
+                    <strong>Thông số:</strong> {asset.technicalSpecs}
+                  </div>
+                )}
+                <div style={{ fontSize: '0.775rem', color: '#991b1b', marginTop: 6, fontStyle: 'italic' }}>
+                  ➜ Khuyến nghị: Đưa vào Danh mục mua sắm thay thế hoặc lập biên bản đề xuất thanh lý nộp quỹ.
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Main Title */}
           <div>
             <div style={{ fontSize: '0.8rem', color: '#1e3a8a', fontWeight: 'bold' }}>
@@ -215,6 +250,61 @@ export default function AssetDetailModal({ isOpen, onClose, asset, onOpenQR }) {
                 <strong>Ghi chú:</strong> {asset.notes}
               </div>
             )}
+          </div>
+
+          {/* Đánh Giá Phù Hợp Đào Tạo & Kỹ Thuật */}
+          <div style={{
+            background: '#ffffff',
+            border: '1px solid #e2e8f0',
+            borderRadius: '12px',
+            padding: '16px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 12
+          }}>
+            <h4 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1e3a8a', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <GraduationCap size={16} />
+              Đánh Giá Phù Hợp Đào Tạo & Tình Trạng Kỹ Thuật
+            </h4>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+              <div>
+                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Mức độ phù hợp đào tạo:</span>
+                <div style={{ marginTop: 4 }}>
+                  <span style={{
+                    background: asset.trainingSuitability === 'Lạc hậu / Không phù hợp đào tạo' ? '#fee2e2' : (asset.trainingSuitability === 'Cần nâng cấp' ? '#fef3c7' : '#dcfce7'),
+                    color: asset.trainingSuitability === 'Lạc hậu / Không phù hợp đào tạo' ? '#b91c1c' : (asset.trainingSuitability === 'Cần nâng cấp' ? '#b45309' : '#15803d'),
+                    padding: '3px 10px',
+                    borderRadius: '12px',
+                    fontSize: '0.8rem',
+                    fontWeight: 700
+                  }}>
+                    {asset.trainingSuitability || 'Phù hợp đào tạo'}
+                  </span>
+                </div>
+              </div>
+              <div>
+                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Tình trạng bảo trì / sửa chữa:</span>
+                <div style={{ fontWeight: 600, color: asset.maintenanceStatus === 'Hỏng chờ sửa chữa' ? '#dc2626' : '#0f172a', marginTop: 4 }}>
+                  <Wrench size={13} style={{ display: 'inline', marginRight: 4 }} />
+                  {asset.maintenanceStatus || 'Bình thường'}
+                </div>
+              </div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Cấu hình / Thông số kỹ thuật:</span>
+                <div style={{ fontWeight: 600, color: '#0f172a', background: '#f8fafc', padding: '8px 12px', borderRadius: '6px', marginTop: 4 }}>
+                  <Cpu size={14} style={{ display: 'inline', marginRight: 6, color: '#2563eb' }} />
+                  {asset.technicalSpecs || 'Chưa có thông số kỹ thuật chi tiết'}
+                </div>
+              </div>
+              {asset.obsoleteReason && (
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <span style={{ fontSize: '0.75rem', color: '#dc2626', fontWeight: 600 }}>Lý do không phù hợp đào tạo:</span>
+                  <div style={{ color: '#b91c1c', background: '#fef2f2', padding: '8px 12px', borderRadius: '6px', marginTop: 4, fontSize: '0.825rem' }}>
+                    {asset.obsoleteReason}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

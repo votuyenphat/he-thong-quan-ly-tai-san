@@ -130,7 +130,11 @@ export function sanitizeAsset(asset) {
     condition: canonicalCondition(asset.condition) || cleanText(asset.condition) || 'Tốt',
     status: canonicalStatus(asset.status) || cleanText(asset.status) || 'Đang sử dụng',
     notes: cleanText(asset.notes),
-    fundingSource: cleanText(asset.fundingSource)
+    fundingSource: cleanText(asset.fundingSource),
+    trainingSuitability: cleanText(asset.trainingSuitability) || 'Phù hợp đào tạo',
+    technicalSpecs: cleanText(asset.technicalSpecs),
+    obsoleteReason: cleanText(asset.obsoleteReason),
+    maintenanceStatus: cleanText(asset.maintenanceStatus) || 'Bình thường'
   };
 }
 

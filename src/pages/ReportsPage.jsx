@@ -134,6 +134,12 @@ export default function ReportsPage() {
       name: '12. Báo cáo các đợt kiểm kê',
       desc: 'Thống kê tiến độ kiểm kê tài sản định kỳ và số lượng đã đối soát',
       headers: ['Mã đợt', 'Tên đợt kiểm kê', 'Năm kiểm kê', 'Phạm vi', 'Người phụ trách', 'Tiến độ kiểm đếm', 'Trạng thái', 'Giá trị']
+    },
+    {
+      id: '13',
+      name: '13. Báo cáo thiết bị lạc hậu & không phù hợp đào tạo',
+      desc: 'Danh mục trang thiết bị cũ, công nghệ lạc hậu hoặc hư hỏng không đáp ứng tiêu chuẩn giảng dạy cần thay thế/nâng cấp',
+      headers: ['Mã thiết bị', 'Tên thiết bị', 'Phòng/Ban phụ trách', 'Vị trí', 'Cấu hình kỹ thuật', 'Tình trạng', 'Đánh giá đào tạo & Lý do', 'Nguyên giá']
     }
   ];
 
@@ -351,6 +357,26 @@ export default function ReportsPage() {
             num: 0
           };
         });
+      }
+
+      case '13': { // Lạc hậu đào tạo
+        const obsoleteList = filteredAssets.filter(a => {
+          return a.trainingSuitability === 'Lạc hậu / Không phù hợp đào tạo' ||
+            a.isObsoleteForTraining ||
+            a.condition === 'Không sử dụng được' ||
+            a.condition === 'Hỏng nặng';
+        });
+        return obsoleteList.map((a, i) => ({
+          stt: i + 1,
+          c1: a.code || '---',
+          c2: a.name || '---',
+          c3: a.departmentName || '---',
+          c4: a.locationPath || '---',
+          c5: a.technicalSpecs || 'Cấu hình cũ, không rõ thông số',
+          c6: a.condition || '---',
+          c7: a.obsoleteReason || (a.trainingSuitability || 'Lạc hậu / Không phù hợp đào tạo'),
+          num: (Number(a.cost) || 0) * (Number(a.quantity) || 1)
+        }));
       }
 
       default:

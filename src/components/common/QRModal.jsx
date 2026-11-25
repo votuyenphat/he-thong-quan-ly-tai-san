@@ -4,18 +4,14 @@ import QRCode from 'qrcode';
 import Modal from './Modal';
 import { Printer, Download } from 'lucide-react';
 import { printElement } from '../../utils/printHelpers';
+import { buildAssetProfileQrUrl } from '../../utils/inventorySlipHelper';
 
 export default function QRModal({ isOpen, onClose, asset }) {
   const canvasRef = useRef(null);
 
   useEffect(() => {
     if (isOpen && asset && canvasRef.current) {
-      const qrData = JSON.stringify({
-        code: asset.code,
-        name: asset.name,
-        dept: asset.departmentName,
-        loc: asset.locationPath
-      });
+      const qrData = buildAssetProfileQrUrl(asset);
 
       QRCode.toCanvas(canvasRef.current, qrData, {
         width: 180,

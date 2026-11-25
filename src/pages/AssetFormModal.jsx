@@ -55,7 +55,11 @@ export default function AssetFormModal({ isOpen, onClose, asset, mode = 'edit' }
     condition: canonicalCondition(asset?.condition) || conditionOptions[0] || 'Tốt',
     status: canonicalStatus(asset?.status) || statusOptions[0] || 'Đang sử dụng',
     notes: asset?.notes || '',
-    fundingSource: asset?.fundingSource || ''
+    fundingSource: asset?.fundingSource || '',
+    trainingSuitability: asset?.trainingSuitability || 'Phù hợp đào tạo',
+    technicalSpecs: asset?.technicalSpecs || '',
+    obsoleteReason: asset?.obsoleteReason || '',
+    maintenanceStatus: asset?.maintenanceStatus || 'Bình thường'
   });
 
   React.useEffect(() => {
@@ -78,7 +82,11 @@ export default function AssetFormModal({ isOpen, onClose, asset, mode = 'edit' }
         condition: canonicalCondition(asset.condition) || conditionOptions[0] || 'Tốt',
         status: canonicalStatus(asset.status) || statusOptions[0] || 'Đang sử dụng',
         notes: asset.notes || '',
-        fundingSource: asset.fundingSource || ''
+        fundingSource: asset.fundingSource || '',
+        trainingSuitability: asset.trainingSuitability || 'Phù hợp đào tạo',
+        technicalSpecs: asset.technicalSpecs || '',
+        obsoleteReason: asset.obsoleteReason || '',
+        maintenanceStatus: asset.maintenanceStatus || 'Bình thường'
       });
     }
   }, [asset, assetTypeOptions, conditionOptions, statusOptions]);
@@ -390,6 +398,62 @@ export default function AssetFormModal({ isOpen, onClose, asset, mode = 'edit' }
               {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
+        </div>
+
+        {/* Row 7: Đánh giá Đào tạo & Bảo trì */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14, background: '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}>
+          <div>
+            <label className="form-label" style={{ color: '#1e3a8a', fontWeight: 700 }}>
+              Mức độ phù hợp đào tạo
+            </label>
+            <select
+              className="form-select"
+              value={formData.trainingSuitability}
+              onChange={e => setFormData(p => ({ ...p, trainingSuitability: e.target.value }))}
+            >
+              <option value="Phù hợp đào tạo">✓ Phù hợp đào tạo</option>
+              <option value="Cần nâng cấp">⚠ Cần nâng cấp / Bổ sung</option>
+              <option value="Lạc hậu / Không phù hợp đào tạo">⛔ Lạc hậu / Không phù hợp đào tạo</option>
+            </select>
+          </div>
+          <div>
+            <label className="form-label" style={{ color: '#1e3a8a', fontWeight: 700 }}>
+              Tình trạng bảo trì / sửa chữa
+            </label>
+            <select
+              className="form-select"
+              value={formData.maintenanceStatus}
+              onChange={e => setFormData(p => ({ ...p, maintenanceStatus: e.target.value }))}
+            >
+              <option value="Bình thường">Bình thường</option>
+              <option value="Cần bảo dưỡng định kỳ">Cần bảo dưỡng định kỳ</option>
+              <option value="Hỏng chờ sửa chữa">Hỏng chờ sửa chữa</option>
+              <option value="Hỏng không thể sửa">Hỏng không thể sửa (Đề xuất hủy/thanh lý)</option>
+            </select>
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label className="form-label">Cấu hình / Thông số kỹ thuật</label>
+            <input
+              className="form-input"
+              value={formData.technicalSpecs}
+              onChange={e => setFormData(p => ({ ...p, technicalSpecs: e.target.value }))}
+              placeholder="VD: Core 2 Duo E7500, RAM 2GB, HDD 160GB, OS Win 7..."
+            />
+          </div>
+          {formData.trainingSuitability === 'Lạc hậu / Không phù hợp đào tạo' && (
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label className="form-label" style={{ color: '#dc2626' }}>
+                Lý do không phù hợp cho đào tạo
+              </label>
+              <input
+                className="form-input"
+                style={{ borderColor: '#fca5a5', background: '#fff5f5' }}
+                value={formData.obsoleteReason}
+                onChange={e => setFormData(p => ({ ...p, obsoleteReason: e.target.value }))}
+                placeholder="VD: Cấu hình yếu, không cài đặt được AutoCAD 2026 và MATLAB môn Thực hành cơ khí..."
+              />
+            </div>
+          )}
         </div>
 
         {/* Notes */}

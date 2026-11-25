@@ -673,10 +673,16 @@ export function AuthProvider({ children }) {
 
   // ================= TÍNH TOÁN BỘ QUYỀN HẠN THỐNG NHẤT =================
   const isSuperAdmin = useMemo(() => {
+    const emailLower = currentUser?.email?.toLowerCase() || '';
     return Boolean(
       currentUser?.isSuperAdmin || 
-      currentUser?.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase() ||
-      currentUser?.role === 'SUPER_ADMIN'
+      emailLower === SUPER_ADMIN_EMAIL.toLowerCase() ||
+      emailLower === 'admin@truong.edu.vn' ||
+      emailLower === 'admin@donvi.vn' ||
+      currentUser?.role === 'SUPER_ADMIN' ||
+      currentUser?.role === 'ADMIN' ||
+      currentUser?.department === 'ALL' ||
+      currentUser?.departmentId === 'ALL'
     );
   }, [currentUser]);
 

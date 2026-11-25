@@ -71,7 +71,11 @@ export default function AssetInbound({ setActiveTab }) {
     condition: conditionOptions[0] || 'Tốt',
     status: statusOptions[0] || 'Đang sử dụng',
     notes: '',
-    fundingSource: 'Ngân sách Nhà nước cấp'
+    fundingSource: 'Ngân sách Nhà nước cấp',
+    trainingSuitability: 'Phù hợp đào tạo',
+    technicalSpecs: '',
+    obsoleteReason: '',
+    maintenanceStatus: 'Bình thường'
   });
 
   const [notification, setNotification] = useState(null);
@@ -1021,6 +1025,57 @@ export default function AssetInbound({ setActiveTab }) {
                   ))}
                 </select>
               </div>
+              <div className="form-group">
+                <label className="form-label" style={{ color: '#1e3a8a', fontWeight: 700 }}>Mức độ phù hợp đào tạo</label>
+                <select
+                  className="form-select"
+                  value={formData.trainingSuitability}
+                  onChange={(e) => setFormData({ ...formData, trainingSuitability: e.target.value })}
+                >
+                  <option value="Phù hợp đào tạo">✓ Phù hợp cho chương trình đào tạo</option>
+                  <option value="Cần nâng cấp">⚠ Cần nâng cấp cấu hình / phụ kiện</option>
+                  <option value="Lạc hậu / Không phù hợp đào tạo">⛔ Lạc hậu / Không phù hợp đào tạo</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" style={{ color: '#1e3a8a', fontWeight: 700 }}>Tình trạng bảo trì ban đầu</label>
+                <select
+                  className="form-select"
+                  value={formData.maintenanceStatus}
+                  onChange={(e) => setFormData({ ...formData, maintenanceStatus: e.target.value })}
+                >
+                  <option value="Bình thường">Bình thường (Sẵn sàng hoạt động)</option>
+                  <option value="Cần bảo dưỡng định kỳ">Cần bảo dưỡng định kỳ</option>
+                  <option value="Hỏng chờ sửa chữa">Hỏng chờ sửa chữa</option>
+                  <option value="Hỏng không thể sửa">Hỏng không thể sửa</option>
+                </select>
+              </div>
+
+              <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                <label className="form-label">Thông số kỹ thuật / Cấu hình</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="VD: Core 2 Duo, RAM 2GB / Máy đo tương tự 20MHz..."
+                  value={formData.technicalSpecs}
+                  onChange={(e) => setFormData({ ...formData, technicalSpecs: e.target.value })}
+                />
+              </div>
+
+              {formData.trainingSuitability === 'Lạc hậu / Không phù hợp đào tạo' && (
+                <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                  <label className="form-label" style={{ color: '#dc2626' }}>Lý do không phù hợp cho đào tạo</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    style={{ borderColor: '#fca5a5', background: '#fff5f5' }}
+                    placeholder="VD: Cấu hình yếu, không cài được phần mềm thực hành chuyên ngành mới..."
+                    value={formData.obsoleteReason}
+                    onChange={(e) => setFormData({ ...formData, obsoleteReason: e.target.value })}
+                  />
+                </div>
+              )}
             </div>
 
             <div className="form-group">
