@@ -23,13 +23,12 @@ import ReportsPage from './pages/ReportsPage';
 import AuditLogsPage from './pages/AuditLogsPage';
 import CategoryConfig from './pages/CategoryConfig';
 import UserManagement from './pages/UserManagement';
-import InventorySession from './pages/InventorySession';
 import InventorySlipGenerator from './pages/InventorySlipGenerator';
 import AssetPublicProfile from './pages/AssetPublicProfile';
 import ForcePasswordChangeModal from './components/common/ForcePasswordChangeModal';
 
 const VALID_TABS = new Set([
-  'dashboard', 'alerts', 'assets', 'inbound', 'inventory', 'inventory-slips',
+  'dashboard', 'alerts', 'assets', 'inbound', 'inventory-slips',
   'categories', 'transfer', 'recall', 'liquidation', 'departments', 'locations',
   'reports', 'audit', 'users'
 ]);
@@ -81,8 +80,6 @@ function MainApplication() {
         return <AssetList setActiveTab={setActiveTab} />;
       case 'inbound':
         return <AssetInbound setActiveTab={setActiveTab} />;
-      case 'inventory':
-        return <InventorySession setActiveTab={setActiveTab} />;
       case 'inventory-slips':
         return <InventorySlipGenerator />;
       case 'categories':

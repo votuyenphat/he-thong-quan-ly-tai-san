@@ -369,11 +369,6 @@ export default function UserManagement() {
                               Đề xuất thanh lý
                             </span>
                           )}
-                          {user.permissions?.inventory_scan && (
-                            <span style={{ fontSize: '0.68rem', background: '#dcfce7', color: '#15803d', padding: '2px 6px', borderRadius: 4 }}>
-                              Quét kiểm kê
-                            </span>
-                          )}
                         </div>
                       )}
                     </td>
@@ -566,10 +561,6 @@ export default function UserManagement() {
                     <input type="checkbox" checked={formData.permissions.liquidation_propose} onChange={() => togglePermission('liquidation_propose')} />
                     <span>Đề xuất Thanh lý tài sản</span>
                   </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.8rem', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={formData.permissions.inventory_scan} onChange={() => togglePermission('inventory_scan')} />
-                    <span>Quét mã QR kiểm kê phòng</span>
-                  </label>
                 </div>
               </div>
 
@@ -645,10 +636,6 @@ export default function UserManagement() {
               <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.825rem', cursor: 'pointer' }}>
                 <input type="checkbox" checked={formData.permissions.liquidation_propose} onChange={() => togglePermission('liquidation_propose')} />
                 <span>Gửi đề xuất Thanh lý tài sản</span>
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.825rem', cursor: 'pointer' }}>
-                <input type="checkbox" checked={formData.permissions.inventory_scan} onChange={() => togglePermission('inventory_scan')} />
-                <span>Quét mã QR kiểm kê phòng ban</span>
               </label>
             </div>
 
