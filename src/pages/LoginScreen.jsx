@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { testSupabaseConnection } from '../services/supabaseClient';
 import { ShieldCheck, Lock, Mail, Eye, EyeOff, ArrowRight, AlertCircle } from 'lucide-react';
 import schoolLogo from '../assets/logo.png';
-import loginIllustration from '../assets/login-illustration.png';
+import loginIllustration from '../assets/login-illustration.jpg';
 
 export default function LoginScreen() {
   const { loginWithPassword, isSyncingUsers } = useAuth();
@@ -213,7 +213,7 @@ export default function LoginScreen() {
           src={loginIllustration}
           onError={(e) => {
             e.currentTarget.onerror = null;
-            e.currentTarget.src = '/login-illustration.png';
+            e.currentTarget.src = '/login-illustration.jpg';
           }}
           alt=""
           className="login-visual-img"
