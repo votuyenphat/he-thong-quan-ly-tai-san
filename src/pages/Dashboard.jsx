@@ -24,8 +24,7 @@ import {
   Package,
   Clock,
   Archive,
-  Building,
-  GraduationCap
+  Building
 } from 'lucide-react';
 
 import {
@@ -48,7 +47,7 @@ ChartJS.register(
 );
 
 export default function Dashboard({ setActiveTab }) {
-  const { assets, departments, alerts } = useAssets();
+  const { assets, departments } = useAssets();
   const { currentUser, permissions } = useAuth();
 
   // Chế độ lọc và hiển thị biểu đồ phòng ban
@@ -360,7 +359,7 @@ export default function Dashboard({ setActiveTab }) {
         </div>
       </div>
 
-      {/* 1. TỔNG QUAN TÀI SẢN (6 Chỉ số KPI) */}
+      {/* 1. TỔNG QUAN TÀI SẢN (5 Chỉ số KPI) */}
       <div className="dashboard-grid-kpi">
         {/* Tổng số */}
         <div className="card" style={{ borderLeft: '4px solid #1e3a8a' }}>
@@ -429,23 +428,6 @@ export default function Dashboard({ setActiveTab }) {
           </div>
           <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 4 }}>
             Đã thu hồi nộp quỹ
-          </div>
-        </div>
-
-        {/* Lạc hậu đào tạo */}
-        <div 
-          className="card" 
-          style={{ borderLeft: '4px solid #dc2626', background: '#fef2f2' }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.825rem', color: '#991b1b', fontWeight: 700 }}>Lạc hậu đào tạo</span>
-            <GraduationCap size={18} color="#dc2626" />
-          </div>
-          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#dc2626', marginTop: 8 }}>
-            {alerts?.obsoleteTraining?.length || 0}
-          </div>
-          <div style={{ fontSize: '0.75rem', color: '#b91c1c', marginTop: 4, fontWeight: 600 }}>
-            Cần thay thế / nâng cấp
           </div>
         </div>
       </div>
