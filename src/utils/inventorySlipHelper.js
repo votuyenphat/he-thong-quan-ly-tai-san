@@ -745,24 +745,37 @@ export function buildSlipsTableHtml(slips = []) {
 
   const htmlRows = [];
   rows.forEach((row, rIdx) => {
+    const c0 = Boolean(row[0]);
+    const c1 = Boolean(row[1]);
+    const c2 = Boolean(row[2]);
+    const gap01 = c0 && c1;
+    const gap12 = c1 && c2;
+
     htmlRows.push(`
       <tr class="slip-content-row">
-        <td class="slip-box">${renderCellContent(row[0])}</td>
-        <td class="slip-col-gap">&nbsp;</td>
-        <td class="slip-box">${renderCellContent(row[1])}</td>
-        <td class="slip-col-gap">&nbsp;</td>
-        <td class="slip-box">${renderCellContent(row[2])}</td>
+        <td class="${c0 ? 'slip-box' : 'slip-box-empty'}">${renderCellContent(row[0])}</td>
+        <td class="${gap01 ? 'slip-col-gap' : 'slip-col-gap-empty'}">&nbsp;</td>
+        <td class="${c1 ? 'slip-box' : 'slip-box-empty'}">${renderCellContent(row[1])}</td>
+        <td class="${gap12 ? 'slip-col-gap' : 'slip-col-gap-empty'}">&nbsp;</td>
+        <td class="${c2 ? 'slip-box' : 'slip-box-empty'}">${renderCellContent(row[2])}</td>
       </tr>
     `);
 
     if (rIdx < rows.length - 1) {
+      const nextRow = rows[rIdx + 1] || [];
+      const v0 = c0 && Boolean(nextRow[0]);
+      const v1 = c1 && Boolean(nextRow[1]);
+      const v2 = c2 && Boolean(nextRow[2]);
+      const vGap01 = gap01 && Boolean(nextRow[0] && nextRow[1]);
+      const vGap12 = gap12 && Boolean(nextRow[1] && nextRow[2]);
+
       htmlRows.push(`
         <tr class="slip-row-gap">
-          <td class="slip-gap-cell"></td>
-          <td class="slip-gap-cross"></td>
-          <td class="slip-gap-cell"></td>
-          <td class="slip-gap-cross"></td>
-          <td class="slip-gap-cell"></td>
+          <td class="${v0 ? 'slip-gap-cell' : 'slip-gap-empty'}"></td>
+          <td class="${vGap01 ? 'slip-gap-cross' : 'slip-gap-empty'}"></td>
+          <td class="${v1 ? 'slip-gap-cell' : 'slip-gap-empty'}"></td>
+          <td class="${vGap12 ? 'slip-gap-cross' : 'slip-gap-empty'}"></td>
+          <td class="${v2 ? 'slip-gap-cell' : 'slip-gap-empty'}"></td>
         </tr>
       `);
     }
@@ -804,20 +817,25 @@ const PRINT_AND_DOC_STYLES = `
     font-family: 'Times New Roman', Times, serif;
     color: #000000;
   }
-  table.inventory-slip-sheet > tbody > tr > td {
-    border: 1px solid #000000;
-  }
   tr.slip-content-row {
     page-break-inside: avoid;
     break-inside: avoid;
   }
   td.slip-box {
+    border: 1px solid #000000;
     vertical-align: middle;
     padding: 4px 5px 5px 6px;
     font-size: 9pt;
     line-height: 1.35;
     word-wrap: break-word;
     overflow-wrap: break-word;
+  }
+  td.slip-box-empty,
+  td.slip-col-gap-empty,
+  td.slip-gap-empty {
+    border: none !important;
+    padding: 0;
+    background: transparent;
   }
   table.slip-inner-layout {
     width: 100%;
@@ -845,6 +863,7 @@ const PRINT_AND_DOC_STYLES = `
     image-rendering: pixelated;
   }
   td.slip-col-gap {
+    border: 1px solid #000000;
     padding: 0;
     font-size: 1pt;
     line-height: 1pt;
@@ -854,7 +873,9 @@ const PRINT_AND_DOC_STYLES = `
     page-break-inside: avoid;
     break-inside: avoid;
   }
-  tr.slip-row-gap td {
+  td.slip-gap-cell,
+  td.slip-gap-cross {
+    border: 1px solid #000000;
     height: 5px;
     padding: 0;
     font-size: 1pt;
@@ -938,7 +959,16 @@ export function exportSlipsToExcel(slips = [], fileName = 'Phieu_Kiem_Ke_Tai_San
 
   const excelRowsHtml = [];
   rows.forEach((row, rIdx) => {
+    const c0 = Boolean(row[0]);
+    const c1 = Boolean(row[1]);
+    const c2 = Boolean(row[2]);
+    const gap01 = c0 && c1;
+    const gap12 = c1 && c2;
+
     const lineTextCell = (slip, lineNo) => {
+      if (!slip) {
+        return `<td style="border:none;">&nbsp;</td>`;
+      }
       const borderStyle =
         lineNo === 0
           ? 'border-top:.5pt solid #000000;border-left:.5pt solid #000000;'
@@ -946,9 +976,6 @@ export function exportSlipsToExcel(slips = [], fileName = 'Phieu_Kiem_Ke_Tai_San
           ? 'border-bottom:.5pt solid #000000;border-left:.5pt solid #000000;'
           : 'border-left:.5pt solid #000000;';
 
-      if (!slip) {
-        return `<td style="${borderStyle}">&nbsp;</td>`;
-      }
       if (lineNo === 0) {
         return `<td style="${borderStyle}text-align:center;font-weight:bold;padding:2pt 3pt 0 4pt;">${escapeHtml(SCHOOL_HEADER_TITLE)}</td>`;
       }
@@ -965,14 +992,20 @@ export function exportSlipsToExcel(slips = [], fileName = 'Phieu_Kiem_Ke_Tai_San
     };
 
     const qrCell = (slip) => {
+      if (!slip) {
+        return `<td rowspan="5" style="border:none;">&nbsp;</td>`;
+      }
       const borderStyle = 'border-top:.5pt solid #000000;border-bottom:.5pt solid #000000;border-right:.5pt solid #000000;';
-      if (!slip || !slip.qrDataUrl) {
+      if (!slip.qrDataUrl) {
         return `<td rowspan="5" style="${borderStyle}vertical-align:middle;text-align:center;">&nbsp;</td>`;
       }
       return `<td rowspan="5" style="${borderStyle}vertical-align:middle;text-align:center;padding:3pt;"><img src="${slip.qrDataUrl}" width="56" height="56" alt="QR" /></td>`;
     };
 
-    const spacerColCell = (lineNo) => {
+    const spacerColCell = (lineNo, active) => {
+      if (!active) {
+        return `<td style="border:none;width:8pt;"></td>`;
+      }
       const borderStyle =
         lineNo === 0
           ? 'border-top:.5pt solid #000000;border-left:.5pt solid #000000;border-right:.5pt solid #000000;'
@@ -988,10 +1021,10 @@ export function exportSlipsToExcel(slips = [], fileName = 'Phieu_Kiem_Ke_Tai_San
           <tr style="height:15pt;">
             ${lineTextCell(row[0], 0)}
             ${qrCell(row[0])}
-            ${spacerColCell(0)}
+            ${spacerColCell(0, gap01)}
             ${lineTextCell(row[1], 0)}
             ${qrCell(row[1])}
-            ${spacerColCell(0)}
+            ${spacerColCell(0, gap12)}
             ${lineTextCell(row[2], 0)}
             ${qrCell(row[2])}
           </tr>
@@ -1000,9 +1033,9 @@ export function exportSlipsToExcel(slips = [], fileName = 'Phieu_Kiem_Ke_Tai_San
         excelRowsHtml.push(`
           <tr style="height:${l === 4 ? '17pt' : '15pt'};">
             ${lineTextCell(row[0], l)}
-            ${spacerColCell(l)}
+            ${spacerColCell(l, gap01)}
             ${lineTextCell(row[1], l)}
-            ${spacerColCell(l)}
+            ${spacerColCell(l, gap12)}
             ${lineTextCell(row[2], l)}
           </tr>
         `);
@@ -1010,13 +1043,20 @@ export function exportSlipsToExcel(slips = [], fileName = 'Phieu_Kiem_Ke_Tai_San
     }
 
     if (rIdx < rows.length - 1) {
+      const nextRow = rows[rIdx + 1] || [];
+      const v0 = c0 && Boolean(nextRow[0]);
+      const v1 = c1 && Boolean(nextRow[1]);
+      const v2 = c2 && Boolean(nextRow[2]);
+      const vGap01 = gap01 && Boolean(nextRow[0] && nextRow[1]);
+      const vGap12 = gap12 && Boolean(nextRow[1] && nextRow[2]);
+
       excelRowsHtml.push(`
         <tr style="height:4.5pt;">
-          <td colspan="2" class="spacer-row">&nbsp;</td>
-          <td class="spacer-row">&nbsp;</td>
-          <td colspan="2" class="spacer-row">&nbsp;</td>
-          <td class="spacer-row">&nbsp;</td>
-          <td colspan="2" class="spacer-row">&nbsp;</td>
+          <td colspan="2" ${v0 ? 'class="spacer-row"' : 'style="border:none;"'}>&nbsp;</td>
+          <td ${vGap01 ? 'class="spacer-row"' : 'style="border:none;"'}>&nbsp;</td>
+          <td colspan="2" ${v1 ? 'class="spacer-row"' : 'style="border:none;"'}>&nbsp;</td>
+          <td ${vGap12 ? 'class="spacer-row"' : 'style="border:none;"'}>&nbsp;</td>
+          <td colspan="2" ${v2 ? 'class="spacer-row"' : 'style="border:none;"'}>&nbsp;</td>
         </tr>
       `);
     }
@@ -1371,9 +1411,18 @@ export async function exportSlipsToPdf(slips = [], fileName = 'Phieu_Kiem_Ke_Tai
       curY = marginY;
     }
 
-    // Vẽ khung viền 3 ô phiếu + 2 ô khe cột dọc đúng mẫu gốc
-    colX.forEach(x => doc.rect(x, curY, slipW, rowH));
-    spacerX.forEach(sx => doc.rect(sx, curY, spacerColW, rowH));
+    // Chỉ vẽ khung viền cho đúng những ô thực sự có phiếu (không vẽ phiếu trắng dư thừa)
+    cells.forEach((cellData, cIdx) => {
+      if (cellData) {
+        doc.rect(colX[cIdx], curY, slipW, rowH);
+      }
+    });
+    if (cells[0] && cells[1]) {
+      doc.rect(spacerX[0], curY, spacerColW, rowH);
+    }
+    if (cells[1] && cells[2]) {
+      doc.rect(spacerX[1], curY, spacerColW, rowH);
+    }
 
     // Vẽ nội dung chữ bên trái & Mã QR bên phải cho từng ô
     cells.forEach((cellData, cIdx) => {
@@ -1444,12 +1493,21 @@ export async function exportSlipsToPdf(slips = [], fileName = 'Phieu_Kiem_Ke_Tai
       }
     });
 
-    // Kiểm tra xem hàng kế tiếp có còn nằm trên cùng trang A4 hiện tại không để vẽ dòng đệm ngang
+    // Kiểm tra xem hàng kế tiếp có còn nằm trên cùng trang A4 hiện tại không để vẽ dòng đệm ngang (chỉ vẽ ở cột có phiếu ở cả 2 hàng)
     const nextRow = preparedRows[rIdx + 1];
     if (nextRow && curY + rowH + spacerRowH + nextRow.rowH <= pageH - marginY) {
       const gapY = curY + rowH;
-      colX.forEach(x => doc.rect(x, gapY, slipW, spacerRowH));
-      spacerX.forEach(sx => doc.rect(sx, gapY, spacerColW, spacerRowH));
+      cells.forEach((cellData, cIdx) => {
+        if (cellData && nextRow.cells[cIdx]) {
+          doc.rect(colX[cIdx], gapY, slipW, spacerRowH);
+        }
+      });
+      if (cells[0] && cells[1] && nextRow.cells[0] && nextRow.cells[1]) {
+        doc.rect(spacerX[0], gapY, spacerColW, spacerRowH);
+      }
+      if (cells[1] && cells[2] && nextRow.cells[1] && nextRow.cells[2]) {
+        doc.rect(spacerX[1], gapY, spacerColW, spacerRowH);
+      }
       curY += rowH + spacerRowH;
     } else {
       curY += rowH;

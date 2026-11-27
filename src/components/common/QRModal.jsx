@@ -1,6 +1,6 @@
 // src/components/common/QRModal.jsx
 // Hộp thoại Tạo Phiếu Kiểm Kê & In Tem Mã QR cho từng tài sản trong Danh mục Tài sản
-// Đồng bộ 100% mẫu phiếu 5 dòng + Mã QR bên phải + Xuất PDF / Word / Excel / In A4 như trang Tạo Phiếu Kiểm Kê
+// Chỉ hiển thị và xuất đúng số lượng phiếu thực tế, hoàn toàn không để các ô phiếu trắng dư thừa
 
 import React, { useState, useMemo, useEffect } from 'react';
 import Modal from './Modal';
@@ -49,7 +49,7 @@ export default function QRModal({ isOpen, onClose, asset }) {
   }, [inventorySessions]);
 
   const [inventoryYear, setInventoryYear] = useState(() => new Date().getFullYear());
-  const [copyMode, setCopyMode] = useState('ALL'); // 'ALL' | 'SINGLE' | 'ROW3'
+  const [copyMode, setCopyMode] = useState('ALL'); // 'ALL' | 'SINGLE'
   const [viewMode, setViewMode] = useState('paged'); // 'paged' | 'all'
   const [currentPage, setCurrentPage] = useState(1);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
@@ -68,7 +68,6 @@ export default function QRModal({ isOpen, onClose, asset }) {
 
   const effectiveCopyCount = useMemo(() => {
     if (copyMode === 'SINGLE') return 1;
-    if (copyMode === 'ROW3') return 3;
     return assetQty;
   }, [copyMode, assetQty]);
 
@@ -90,9 +89,12 @@ export default function QRModal({ isOpen, onClose, asset }) {
     return slips.slice(start, start + SLIPS_PER_A4_PAGE);
   }, [slips, viewMode, safePage]);
 
+  // Tự động co số cột vừa khít khi chỉ có 1 hoặc 2 phiếu để không có khoảng trống thừa
+  const activeCols = Math.min(3, Math.max(1, displayedSlips.length));
+
   const previewRows = useMemo(() => {
-    return chunkSlipsIntoRows(displayedSlips, 3);
-  }, [displayedSlips]);
+    return chunkSlipsIntoRows(displayedSlips, activeCols);
+  }, [displayedSlips, activeCols]);
 
   if (!asset) return null;
 
@@ -133,6 +135,9 @@ export default function QRModal({ isOpen, onClose, asset }) {
   const handleExportWord = () => {
     exportSlipsToWord(slips, `${getSafeFileBaseName()}.doc`);
   };
+
+  const sheetMaxWidth = activeCols === 1 ? '320px' : activeCols === 2 ? '640px' : '100%';
+  const sheetMinWidth = activeCols === 1 ? '280px' : activeCols === 2 ? '520px' : '740px';
 
   return (
     <>
@@ -175,7 +180,7 @@ export default function QRModal({ isOpen, onClose, asset }) {
                 className="btn btn-success"
                 onClick={handleExportExcel}
                 disabled={slips.length === 0}
-                title="Tải về file Excel (.xls) giữ nguyên khung viền 3 cột và mã QR bên phải"
+                title="Tải về file Excel (.xls) kèm mã QR bên phải từng phiếu"
               >
                 <FileSpreadsheet size={15} />
                 Excel (.xls)
@@ -272,9 +277,10 @@ export default function QRModal({ isOpen, onClose, asset }) {
                   height: '40px',
                   borderColor: '#60a5fa',
                   backgroundColor: '#ffffff',
-                  cursor: 'pointer'
+                  cursor: totalQuantity > 1 ? 'pointer' : 'default'
                 }}
                 value={copyMode}
+                disabled={totalQuantity <= 1}
                 onChange={(e) => {
                   setCopyMode(e.target.value);
                   setCurrentPage(1);
@@ -285,9 +291,6 @@ export default function QRModal({ isOpen, onClose, asset }) {
                 </option>
                 {totalQuantity > 1 && (
                   <option value="SINGLE">Chỉ 1 phiếu lẻ (in bù tem rách/hỏng)</option>
-                )}
-                {totalQuantity !== 3 && (
-                  <option value="ROW3">3 phiếu (vừa đủ 1 hàng ngang khổ A4)</option>
                 )}
               </select>
             </div>
@@ -339,7 +342,7 @@ export default function QRModal({ isOpen, onClose, asset }) {
           </div>
         </div>
 
-        {/* Bản xem trước trang giấy A4 (chuẩn 3 cột như trang Tạo Phiếu Kiểm Kê) */}
+        {/* Bản xem trước vừa khít số lượng phiếu thực tế (không để ô phiếu trắng) */}
         <div
           style={{
             background: '#f1f5f9',
@@ -361,7 +364,7 @@ export default function QRModal({ isOpen, onClose, asset }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
               <Eye size={16} color="#1e3a8a" />
               <span style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.9rem' }}>
-                Bản Xem Trước Phiếu Kiểm Kê (Chuẩn Khổ A4 - 3 Cột - Có Mã QR Bên Phải)
+                Bản Xem Trước Phiếu Kiểm Kê ({slips.length} Phiếu - Có Mã QR Bên Phải)
               </span>
             </div>
 
@@ -441,11 +444,13 @@ export default function QRModal({ isOpen, onClose, asset }) {
             <div
               style={{
                 background: '#ffffff',
-                minWidth: '740px',
+                maxWidth: sheetMaxWidth,
+                minWidth: sheetMinWidth,
                 margin: '0 auto',
                 padding: '16px 14px',
                 boxShadow: '0 4px 14px rgba(15, 23, 42, 0.07)',
-                border: '1px solid #cbd5e1'
+                border: '1px solid #cbd5e1',
+                borderRadius: 6
               }}
             >
               <table
@@ -458,137 +463,181 @@ export default function QRModal({ isOpen, onClose, asset }) {
                   background: '#ffffff'
                 }}
               >
-                <colgroup>
-                  <col style={{ width: '32.5%' }} />
-                  <col style={{ width: '1.25%' }} />
-                  <col style={{ width: '32.5%' }} />
-                  <col style={{ width: '1.25%' }} />
-                  <col style={{ width: '32.5%' }} />
-                </colgroup>
+                {activeCols === 1 && (
+                  <colgroup>
+                    <col style={{ width: '100%' }} />
+                  </colgroup>
+                )}
+                {activeCols === 2 && (
+                  <colgroup>
+                    <col style={{ width: '49%' }} />
+                    <col style={{ width: '2%' }} />
+                    <col style={{ width: '49%' }} />
+                  </colgroup>
+                )}
+                {activeCols === 3 && (
+                  <colgroup>
+                    <col style={{ width: '32.5%' }} />
+                    <col style={{ width: '1.25%' }} />
+                    <col style={{ width: '32.5%' }} />
+                    <col style={{ width: '1.25%' }} />
+                    <col style={{ width: '32.5%' }} />
+                  </colgroup>
+                )}
                 <tbody>
-                  {previewRows.map((row, rIdx) => (
-                    <React.Fragment key={rIdx}>
-                      <tr style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
-                        {[0, 1, 2].map((colIdx) => {
-                          const slip = row[colIdx];
-                          return (
-                            <React.Fragment key={colIdx}>
-                              <td
-                                style={{
-                                  border: '1px solid #000000',
-                                  verticalAlign: 'middle',
-                                  padding: '5px 6px 6px 8px',
-                                  fontSize: '12px',
-                                  lineHeight: 1.38,
-                                  wordWrap: 'break-word',
-                                  overflowWrap: 'break-word'
-                                }}
-                              >
-                                {slip ? (
-                                  <div
-                                    style={{
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'space-between',
-                                      gap: 6
-                                    }}
-                                  >
-                                    {/* Bên trái: Nội dung 5 dòng chuẩn mẫu phiếu kiểm kê */}
-                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                      <div
-                                        style={{
-                                          textAlign: 'center',
-                                          fontWeight: 700,
-                                          fontSize: '12px',
-                                          lineHeight: 1.2,
-                                          textTransform: 'uppercase'
-                                        }}
-                                      >
-                                        {SCHOOL_HEADER_TITLE}
-                                      </div>
-                                      <div
-                                        style={{
-                                          textAlign: 'center',
-                                          fontWeight: 400,
-                                          fontSize: '12px',
-                                          lineHeight: 1.22,
-                                          textTransform: 'uppercase',
-                                          marginBottom: '4px'
-                                        }}
-                                      >
-                                        {SLIP_SUBTITLE}
-                                      </div>
-                                      <div style={{ textAlign: 'left', fontWeight: 400, lineHeight: 1.4 }}>
-                                        Thời gian: {slip.timeText}
-                                      </div>
-                                      <div style={{ textAlign: 'left', fontWeight: 400, lineHeight: 1.4 }}>
-                                        Bộ phận: {slip.deptLabel} ; Vị trí: {slip.locLabel}
-                                      </div>
-                                      <div style={{ textAlign: 'left', fontWeight: 400, lineHeight: 1.4 }}>
-                                        Tên TS: <strong style={{ fontWeight: 700 }}>{slip.assetName}</strong> ; SL:{' '}
-                                        {slip.totalQuantity}
-                                      </div>
-                                    </div>
+                  {previewRows.map((row, rIdx) => {
+                    const nextRow = previewRows[rIdx + 1] || [];
+                    const colIndices = Array.from({ length: activeCols }, (_, i) => i);
 
-                                    {/* Bên phải: Mã QR quét hiển thị 1 hình ảnh thông tin tài sản */}
-                                    {slip.qrDataUrl && (
-                                      <div
-                                        onClick={handlePreviewQrImage}
-                                        style={{
-                                          flexShrink: 0,
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          justifyContent: 'center',
-                                          cursor: 'pointer'
-                                        }}
-                                        title={`Bấm để xem thử hình ảnh thông tin tài sản (${slip.assetCode}) hiển thị khi quét QR`}
-                                      >
-                                        <img
-                                          src={slip.qrDataUrl}
-                                          alt={`QR ${slip.assetName}`}
-                                          style={{
-                                            width: 58,
-                                            height: 58,
-                                            display: 'block',
-                                            imageRendering: 'pixelated'
-                                          }}
-                                        />
-                                      </div>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <span>&nbsp;</span>
-                                )}
-                              </td>
+                    return (
+                      <React.Fragment key={rIdx}>
+                        <tr style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
+                          {colIndices.map((colIdx) => {
+                            const slip = row[colIdx];
+                            const hasSpacerBorder = Boolean(row[colIdx] && row[colIdx + 1]);
 
-                              {colIdx < 2 && (
+                            return (
+                              <React.Fragment key={colIdx}>
                                 <td
                                   style={{
-                                    border: '1px solid #000000',
-                                    padding: 0,
-                                    fontSize: '1px',
-                                    lineHeight: '1px'
+                                    border: slip ? '1px solid #000000' : 'none',
+                                    verticalAlign: 'middle',
+                                    padding: slip ? '5px 6px 6px 8px' : 0,
+                                    fontSize: '12px',
+                                    lineHeight: 1.38,
+                                    wordWrap: 'break-word',
+                                    overflowWrap: 'break-word'
                                   }}
                                 >
-                                  &nbsp;
-                                </td>
-                              )}
-                            </React.Fragment>
-                          );
-                        })}
-                      </tr>
+                                  {slip ? (
+                                    <div
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        gap: 6
+                                      }}
+                                    >
+                                      {/* Bên trái: Nội dung 5 dòng chuẩn mẫu phiếu kiểm kê */}
+                                      <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div
+                                          style={{
+                                            textAlign: 'center',
+                                            fontWeight: 700,
+                                            fontSize: '12px',
+                                            lineHeight: 1.2,
+                                            textTransform: 'uppercase'
+                                          }}
+                                        >
+                                          {SCHOOL_HEADER_TITLE}
+                                        </div>
+                                        <div
+                                          style={{
+                                            textAlign: 'center',
+                                            fontWeight: 400,
+                                            fontSize: '12px',
+                                            lineHeight: 1.22,
+                                            textTransform: 'uppercase',
+                                            marginBottom: '4px'
+                                          }}
+                                        >
+                                          {SLIP_SUBTITLE}
+                                        </div>
+                                        <div style={{ textAlign: 'left', fontWeight: 400, lineHeight: 1.4 }}>
+                                          Thời gian: {slip.timeText}
+                                        </div>
+                                        <div style={{ textAlign: 'left', fontWeight: 400, lineHeight: 1.4 }}>
+                                          Bộ phận: {slip.deptLabel} ; Vị trí: {slip.locLabel}
+                                        </div>
+                                        <div style={{ textAlign: 'left', fontWeight: 400, lineHeight: 1.4 }}>
+                                          Tên TS: <strong style={{ fontWeight: 700 }}>{slip.assetName}</strong> ; SL:{' '}
+                                          {slip.totalQuantity}
+                                        </div>
+                                      </div>
 
-                      {rIdx < previewRows.length - 1 && (
-                        <tr style={{ height: '6px', breakInside: 'avoid', pageBreakInside: 'avoid' }}>
-                          <td style={{ border: '1px solid #000000', height: '6px', padding: 0, fontSize: '1px', lineHeight: '1px' }} />
-                          <td style={{ border: '1px solid #000000', height: '6px', padding: 0, fontSize: '1px', lineHeight: '1px' }} />
-                          <td style={{ border: '1px solid #000000', height: '6px', padding: 0, fontSize: '1px', lineHeight: '1px' }} />
-                          <td style={{ border: '1px solid #000000', height: '6px', padding: 0, fontSize: '1px', lineHeight: '1px' }} />
-                          <td style={{ border: '1px solid #000000', height: '6px', padding: 0, fontSize: '1px', lineHeight: '1px' }} />
+                                      {/* Bên phải: Mã QR quét hiển thị 1 hình ảnh thông tin tài sản */}
+                                      {slip.qrDataUrl && (
+                                        <div
+                                          onClick={handlePreviewQrImage}
+                                          style={{
+                                            flexShrink: 0,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            cursor: 'pointer'
+                                          }}
+                                          title={`Bấm để xem thử hình ảnh thông tin tài sản (${slip.assetCode}) hiển thị khi quét QR`}
+                                        >
+                                          <img
+                                            src={slip.qrDataUrl}
+                                            alt={`QR ${slip.assetName}`}
+                                            style={{
+                                              width: 58,
+                                              height: 58,
+                                              display: 'block',
+                                              imageRendering: 'pixelated'
+                                            }}
+                                          />
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : null}
+                                </td>
+
+                                {colIdx < activeCols - 1 && (
+                                  <td
+                                    style={{
+                                      border: hasSpacerBorder ? '1px solid #000000' : 'none',
+                                      padding: 0,
+                                      fontSize: '1px',
+                                      lineHeight: '1px'
+                                    }}
+                                  >
+                                    &nbsp;
+                                  </td>
+                                )}
+                              </React.Fragment>
+                            );
+                          })}
                         </tr>
-                      )}
-                    </React.Fragment>
-                  ))}
+
+                        {rIdx < previewRows.length - 1 && (
+                          <tr style={{ height: '6px', breakInside: 'avoid', pageBreakInside: 'avoid' }}>
+                            {colIndices.map((colIdx) => {
+                              const hasVertBoth = Boolean(row[colIdx] && nextRow[colIdx]);
+                              const hasCornerAll = Boolean(
+                                row[colIdx] && row[colIdx + 1] && nextRow[colIdx] && nextRow[colIdx + 1]
+                              );
+                              return (
+                                <React.Fragment key={`gap-${colIdx}`}>
+                                  <td
+                                    style={{
+                                      border: hasVertBoth ? '1px solid #000000' : 'none',
+                                      height: '6px',
+                                      padding: 0,
+                                      fontSize: '1px',
+                                      lineHeight: '1px'
+                                    }}
+                                  />
+                                  {colIdx < activeCols - 1 && (
+                                    <td
+                                      style={{
+                                        border: hasCornerAll ? '1px solid #000000' : 'none',
+                                        height: '6px',
+                                        padding: 0,
+                                        fontSize: '1px',
+                                        lineHeight: '1px'
+                                      }}
+                                    />
+                                  )}
+                                </React.Fragment>
+                              );
+                            })}
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
