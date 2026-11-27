@@ -1,15 +1,59 @@
 // src/pages/LoginScreen.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Building2, ShieldCheck, Lock, Mail, Eye, EyeOff, ArrowRight, AlertCircle } from 'lucide-react';
+import { testSupabaseConnection } from '../services/supabaseClient';
+import { ShieldCheck, Lock, Mail, Eye, EyeOff, ArrowRight, AlertCircle } from 'lucide-react';
+import schoolLogo from '../assets/logo.png';
+import loginIllustration from '../assets/login-illustration.png';
 
 export default function LoginScreen() {
-  const { loginWithPassword } = useAuth();
+  const { loginWithPassword, isSyncingUsers } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [connectionState, setConnectionState] = useState('checking'); // 'checking' | 'cloud' | 'local'
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const verifyConnection = async () => {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        if (isMounted) setConnectionState('local');
+        return;
+      }
+
+      if (isMounted) setConnectionState('checking');
+      try {
+        const res = await testSupabaseConnection();
+        if (!isMounted) return;
+        if (res?.success || res?.needsMigration) {
+          setConnectionState('cloud');
+        } else {
+          setConnectionState('local');
+        }
+      } catch {
+        if (isMounted) setConnectionState('local');
+      }
+    };
+
+    verifyConnection();
+
+    const handleOnline = () => verifyConnection();
+    const handleOffline = () => {
+      if (isMounted) setConnectionState('local');
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   const handlePasswordLogin = async (e) => {
     e.preventDefault();
@@ -25,169 +69,157 @@ export default function LoginScreen() {
     }
   };
 
+  const effectiveStatus = isSyncingUsers && connectionState === 'checking' ? 'checking' : connectionState;
+
+  const statusConfig = {
+    cloud: {
+      cls: 'cloud',
+      label: 'Đồng bộ Đám mây sẵn sàng'
+    },
+    local: {
+      cls: 'local',
+      label: 'Chế độ Nội bộ (Hoạt động ngoại tuyến)'
+    },
+    checking: {
+      cls: 'checking',
+      label: 'Đang kiểm tra kết nối hệ thống...'
+    }
+  }[effectiveStatus];
+
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: 'linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #1e40af 100%)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '24px'
-    }}>
-      <div style={{
-        background: '#ffffff',
-        borderRadius: '24px',
-        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.4)',
-        width: '100%',
-        maxWidth: '480px',
-        padding: '36px 32px',
-        textAlign: 'center',
-        position: 'relative',
-        overflow: 'hidden'
-      }}>
-        {/* Top subtle decorative bar */}
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          height: '5px',
-          background: 'linear-gradient(90deg, #2563eb, #3b82f6, #60a5fa)'
-        }} />
-
-        {/* Brand Logo */}
-        <img 
-          src="/logo.png" 
-          alt="Logo Trường Cao Đẳng Bách Khoa Nam Sài Gòn" 
-          style={{
-            width: '85px',
-            height: '85px',
-            objectFit: 'contain',
-            margin: '0 auto 16px',
-            display: 'block',
-            filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.1))'
-          }} 
-        />
-
-        <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.01em', margin: 0 }}>
-          HỆ THỐNG QUẢN LÝ TÀI SẢN
-        </h1>
-        <p style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '6px', marginBottom: '22px' }}>
-          Trường Cao Đẳng Bách Khoa Nam Sài Gòn
-        </p>
-
-        {/* Error message */}
-        {errorMsg && (
-          <div style={{
-            background: '#fef2f2',
-            border: '1px solid #fecaca',
-            color: '#b91c1c',
-            padding: '10px 14px',
-            borderRadius: '10px',
-            fontSize: '0.825rem',
-            marginBottom: '18px',
-            textAlign: 'left',
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: 8
-          }}>
-            <AlertCircle size={16} style={{ flexShrink: 0, marginTop: 2 }} />
-            <div>{errorMsg}</div>
+    <div className="login-split-wrapper">
+      {/* Cột trái (45%): Form đăng nhập nền trắng tinh gọn */}
+      <section className="login-form-panel">
+        <div className="login-form-container">
+          {/* Logo chính thức của Trường Cao Đẳng Bách Khoa Nam Sài Gòn */}
+          <div className="login-brand-logo-wrap">
+            <img
+              src={schoolLogo}
+              onError={(e) => {
+                e.currentTarget.onerror = null;
+                e.currentTarget.src = '/logo.png';
+              }}
+              alt="Logo Trường Cao Đẳng Bách Khoa Nam Sài Gòn"
+              className="login-brand-logo"
+            />
           </div>
-        )}
 
-        {/* Form đăng nhập Email & Mật khẩu */}
-        <form onSubmit={handlePasswordLogin} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div style={{ textAlign: 'left' }}>
-            <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#334155', display: 'block', marginBottom: 4 }}>
-              Địa chỉ Email
-            </label>
-            <div style={{ position: 'relative' }}>
-              <input
-                type="email"
-                className="form-input"
-                placeholder="Email công tác (ví dụ: cntt@truong.edu.vn)..."
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                style={{ paddingLeft: 36 }}
-                required
-                autoFocus
-              />
-              <Mail size={16} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+          <h1 className="login-heading">HỆ THỐNG QUẢN LÝ TÀI SẢN</h1>
+          <p className="login-subheading">Trường Cao Đẳng Bách Khoa Nam Sài Gòn</p>
+
+          {/* Thông báo lỗi nếu nhập sai */}
+          {errorMsg && (
+            <div
+              style={{
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+                color: '#b91c1c',
+                padding: '10px 14px',
+                borderRadius: '10px',
+                fontSize: '0.825rem',
+                marginBottom: '18px',
+                textAlign: 'left',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 8
+              }}
+            >
+              <AlertCircle size={16} style={{ flexShrink: 0, marginTop: 2 }} />
+              <div>{errorMsg}</div>
+            </div>
+          )}
+
+          {/* Form đăng nhập Email & Mật khẩu */}
+          <form onSubmit={handlePasswordLogin} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div className="login-field-group">
+              <label htmlFor="login-email" className="login-field-label">
+                Địa chỉ Email
+              </label>
+              <div className="login-input-wrap">
+                <Mail size={17} className="login-input-icon" />
+                <input
+                  id="login-email"
+                  type="email"
+                  className="login-input"
+                  placeholder="Email công tác (ví dụ: cntt@truong.edu.vn)..."
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  autoFocus
+                  autoComplete="username"
+                />
+              </div>
+            </div>
+
+            <div className="login-field-group">
+              <label htmlFor="login-password" className="login-field-label">
+                Mật khẩu
+              </label>
+              <div className="login-input-wrap">
+                <Lock size={17} className="login-input-icon" />
+                <input
+                  id="login-password"
+                  type={showPassword ? 'text' : 'password'}
+                  className="login-input"
+                  style={{ paddingRight: 42 }}
+                  placeholder="Nhập mật khẩu..."
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  className="login-eye-btn"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                >
+                  {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                </button>
+              </div>
+            </div>
+
+            <button type="submit" className="login-submit-btn" disabled={loading}>
+              <span>{loading ? 'Đang xác thực...' : 'Đăng Nhập'}</span>
+              {!loading && <ArrowRight size={17} className="login-submit-arrow" />}
+            </button>
+          </form>
+
+          {/* Chân trang: Bảo mật & Chấm trạng thái kết nối Hệ thống */}
+          <div className="login-footer">
+            <div className="login-security-note">
+              <ShieldCheck size={15} color="#10b981" strokeWidth={2.2} />
+              <span>Hệ thống bảo mật xác thực phân quyền nội bộ</span>
+            </div>
+
+            <div className={`login-status-pill ${statusConfig.cls}`}>
+              <span className={`login-status-dot ${statusConfig.cls}`} />
+              <span>{statusConfig.label}</span>
             </div>
           </div>
-
-          <div style={{ textAlign: 'left' }}>
-            <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#334155', display: 'block', marginBottom: 4 }}>
-              Mật khẩu
-            </label>
-            <div style={{ position: 'relative' }}>
-              <input
-                type={showPassword ? 'text' : 'password'}
-                className="form-input"
-                placeholder="Nhập mật khẩu..."
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                style={{ paddingLeft: 36, paddingRight: 36 }}
-                required
-              />
-              <Lock size={16} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                style={{
-                  position: 'absolute',
-                  right: 10,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  color: '#94a3b8'
-                }}
-              >
-                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            className="btn btn-primary"
-            disabled={loading}
-            style={{
-              padding: '11px',
-              fontSize: '0.9rem',
-              fontWeight: 700,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8,
-              marginTop: 4,
-              background: 'linear-gradient(135deg, #1e3a8a, #2563eb)'
-            }}
-          >
-            {loading ? 'Đang xác thực...' : 'Đăng Nhập'}
-            {!loading && <ArrowRight size={16} />}
-          </button>
-        </form>
-
-        {/* Security & System Note */}
-        <div style={{
-          marginTop: '24px',
-          paddingTop: '16px',
-          borderTop: '1px solid #f1f5f9',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 6,
-          fontSize: '0.75rem',
-          color: '#94a3b8'
-        }}>
-          <ShieldCheck size={14} color="#10b981" />
-          <span>Hệ thống bảo mật xác thực phân quyền nội bộ</span>
         </div>
-      </div>
+      </section>
+
+      {/* Cột phải (55%): Minh họa 3D Quản lý Tài sản & Hiệu ứng ánh sáng động */}
+      <section className="login-visual-panel" aria-hidden="true">
+        <div className="login-ambient-glow" />
+        <div className="login-light-beam" />
+        <span className="login-particle p1" />
+        <span className="login-particle p2" />
+        <span className="login-particle p3" />
+        <span className="login-particle p4" />
+        <span className="login-particle p5" />
+        <img
+          src={loginIllustration}
+          onError={(e) => {
+            e.currentTarget.onerror = null;
+            e.currentTarget.src = '/login-illustration.png';
+          }}
+          alt=""
+          className="login-visual-img"
+        />
+        <div className="login-visual-vignette" />
+      </section>
     </div>
   );
 }
