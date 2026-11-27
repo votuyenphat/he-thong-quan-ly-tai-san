@@ -11,6 +11,33 @@ import { cleanText } from '../utils/normalize';
 const AuthContext = createContext();
 
 export const SUPER_ADMIN_EMAIL = 'vphat772@gmail.com';
+const AUTH_SESSION_STORAGE_KEY = 'qlts_auth_session_v2';
+
+function loadInitialAuthSession() {
+  try {
+    // Xóa các khóa phiên cũ từng tự động gán quyền Super Admin mà không cần đăng nhập
+    localStorage.removeItem('qlts_is_logged_in');
+    localStorage.removeItem('qlts_auth_user');
+
+    const raw = localStorage.getItem(AUTH_SESSION_STORAGE_KEY);
+    if (!raw) {
+      return { isLoggedIn: false, user: null };
+    }
+
+    const parsed = JSON.parse(raw);
+    if (
+      parsed?.isLoggedIn === true &&
+      parsed?.user &&
+      typeof parsed.user.email === 'string' &&
+      parsed.user.email.trim().length > 0
+    ) {
+      return { isLoggedIn: true, user: parsed.user };
+    }
+  } catch (e) {
+    console.error('Lỗi đọc phiên đăng nhập:', e);
+  }
+  return { isLoggedIn: false, user: null };
+}
 
 export const DEFAULT_PERMISSIONS = {
   asset_create: true,
@@ -80,24 +107,11 @@ export function AuthProvider({ children }) {
   const [isSyncingUsers, setIsSyncingUsers] = useState(false);
   const [lastUserSyncTime, setLastUserSyncTime] = useState(null);
 
-  // Người dùng hiện tại
-  const [currentUser, setCurrentUser] = useState(() => {
-    const saved = localStorage.getItem('qlts_auth_user');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error('Lỗi đọc qlts_auth_user:', e);
-      }
-    }
-    return DEFAULT_SUPER_ADMIN;
-  });
-
-  // Trạng thái đăng nhập (mặc định true nếu có session trước đó)
-  const [isLoggedIn, setIsLoggedIn] = useState(() => {
-    const saved = localStorage.getItem('qlts_is_logged_in');
-    return saved !== null ? JSON.parse(saved) : true;
-  });
+  // Khởi tạo phiên đăng nhập: mặc định BẮT BUỘC chưa đăng nhập trên mọi thiết bị mới
+  const [initialSession] = useState(() => loadInitialAuthSession());
+  const [currentUser, setCurrentUser] = useState(initialSession.user);
+  const [isLoggedIn, setIsLoggedIn] = useState(initialSession.isLoggedIn);
+  const isCreatingAccountRef = useRef(false);
 
   // Đồng bộ lưu localStorage khi state thay đổi
   useEffect(() => {
@@ -105,16 +119,19 @@ export function AuthProvider({ children }) {
   }, [userAccounts]);
 
   useEffect(() => {
-    if (currentUser) {
-      localStorage.setItem('qlts_auth_user', JSON.stringify(currentUser));
+    if (isLoggedIn && currentUser?.email) {
+      localStorage.setItem(
+        AUTH_SESSION_STORAGE_KEY,
+        JSON.stringify({
+          isLoggedIn: true,
+          user: currentUser,
+          updatedAt: new Date().toISOString()
+        })
+      );
     } else {
-      localStorage.removeItem('qlts_auth_user');
+      localStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
     }
-  }, [currentUser]);
-
-  useEffect(() => {
-    localStorage.setItem('qlts_is_logged_in', JSON.stringify(isLoggedIn));
-  }, [isLoggedIn]);
+  }, [isLoggedIn, currentUser]);
 
   // Đồng bộ tài khoản người dùng và phân quyền từ Supabase Cloud (app_database: id='user_accounts')
   const syncUserAccountsWithCloud = useCallback(async () => {
@@ -159,6 +176,25 @@ export function AuthProvider({ children }) {
         setUserAccounts(mergedAccounts);
         localStorage.setItem('qlts_user_accounts', JSON.stringify(mergedAccounts));
 
+        // Kiểm tra lại phiên đăng nhập hiện tại đối chiếu với dữ liệu mới nhất trên đám mây
+        setCurrentUser(curr => {
+          if (!curr) return null;
+          const isCurrSA = curr.isSuperAdmin || curr.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
+          const updated = mergedAccounts.find(u => u.email?.toLowerCase() === curr.email?.toLowerCase());
+          if (!isCurrSA && (!updated || updated.status === 'locked')) {
+            setIsLoggedIn(false);
+            return null;
+          }
+          if (updated) {
+            return {
+              ...curr,
+              ...updated,
+              lastLogin: curr.lastLogin
+            };
+          }
+          return curr;
+        });
+
         if (needsPushToCloud) {
           await pushUserAccountsToSupabase(mergedAccounts);
         }
@@ -198,8 +234,13 @@ export function AuthProvider({ children }) {
 
         // Cập nhật người dùng hiện tại nếu thông tin hoặc quyền hạn bị thay đổi từ máy khác
         setCurrentUser(curr => {
-          if (!curr) return curr;
+          if (!curr) return null;
+          const isCurrSA = curr.isSuperAdmin || curr.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
           const updated = finalized.find(u => u.email?.toLowerCase() === curr.email?.toLowerCase());
+          if (!isCurrSA && (!updated || updated.status === 'locked')) {
+            setIsLoggedIn(false);
+            return null;
+          }
           if (updated) {
             return {
               ...curr,
@@ -213,40 +254,34 @@ export function AuthProvider({ children }) {
       }
     });
 
-    // 3. Lắng nghe session Supabase Auth nếu có
+    // 3. Lắng nghe session Supabase Auth nếu đã có phiên đăng nhập hợp lệ trên máy này
     const supabase = getSupabaseClient();
     let authListener = null;
     if (supabase) {
       const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
-        if (session?.user) {
+        if (isCreatingAccountRef.current) return;
+        // Không tự động đăng nhập từ INITIAL_SESSION nếu người dùng chưa đăng nhập qua màn hình Login
+        if (event === 'INITIAL_SESSION' && !localStorage.getItem(AUTH_SESSION_STORAGE_KEY)) {
+          return;
+        }
+        if (event === 'SIGNED_IN' && session?.user) {
           const email = session.user.email?.toLowerCase();
           const isSA = email === SUPER_ADMIN_EMAIL.toLowerCase();
 
           setUserAccounts(currentList => {
             const existing = currentList.find(u => u.email?.toLowerCase() === email);
+            if (!isSA && (!existing || existing.status === 'locked')) {
+              return currentList;
+            }
             const profile = existing || {
-              id: session.user.id,
+              ...DEFAULT_SUPER_ADMIN,
+              id: session.user.id || DEFAULT_SUPER_ADMIN.id,
               email: session.user.email,
-              name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Người dùng',
-              avatar: session.user.user_metadata?.avatar_url || null,
-              role: isSA ? 'SUPER_ADMIN' : 'QUAN_LY_PHONG',
-              isSuperAdmin: isSA,
-              departmentId: isSA ? 'ALL' : '',
-              departmentName: isSA ? 'Toàn trường' : 'Chưa gán phòng ban',
-              permissions: isSA ? { ...SUPER_ADMIN_PERMISSIONS } : { ...DEFAULT_PERMISSIONS },
-              status: 'active',
-              forcePasswordChange: false,
               lastLogin: new Date().toISOString()
             };
 
             setCurrentUser(profile);
             setIsLoggedIn(true);
-
-            if (!existing) {
-              const nextList = [...currentList, profile];
-              pushUserAccountsToSupabase(nextList).catch(console.warn);
-              return nextList;
-            }
             return currentList;
           });
         }
@@ -311,9 +346,31 @@ export function AuthProvider({ children }) {
 
     // Xác thực tài khoản Super Admin mặc định
     if (isSA) {
-      // Mật khẩu mặc định hoặc mật khẩu đã lưu
-      const storedPass = localStorage.getItem('qlts_admin_password') || 'Admin@123456';
-      if (!supabaseLoggedIn && cleanPass !== storedPass && cleanPass !== 'Admin@123456') {
+      const storedPass = localStorage.getItem('qlts_admin_password');
+      let cloudAdminPass = matchedAccount?.password;
+
+      if (!supabaseLoggedIn && cleanPass !== 'Admin@123456' && cleanPass !== storedPass && cleanPass !== cloudAdminPass) {
+        try {
+          const remote = await fetchUserAccountsFromSupabase();
+          if (remote?.accounts && Array.isArray(remote.accounts) && remote.accounts.length > 0) {
+            setUserAccounts(remote.accounts);
+            localStorage.setItem('qlts_user_accounts', JSON.stringify(remote.accounts));
+            const remoteSA = remote.accounts.find(u => u.email?.toLowerCase() === cleanEmail);
+            cloudAdminPass = remoteSA?.password;
+            if (remoteSA) matchedAccount = remoteSA;
+          }
+        } catch (err) {
+          console.warn('[Auth] Lỗi tải mật khẩu Super Admin từ cloud:', err);
+        }
+      }
+
+      const isValidAdminPass =
+        supabaseLoggedIn ||
+        cleanPass === 'Admin@123456' ||
+        (Boolean(storedPass) && cleanPass === storedPass) ||
+        (Boolean(cloudAdminPass) && cleanPass === cloudAdminPass);
+
+      if (!isValidAdminPass) {
         throw new Error('Mật khẩu không chính xác. Vui lòng kiểm tra lại!');
       }
 
@@ -424,6 +481,12 @@ export function AuthProvider({ children }) {
 
   // ================= ĐĂNG XUẤT =================
   const logout = async () => {
+    localStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
+    localStorage.removeItem('qlts_is_logged_in');
+    localStorage.removeItem('qlts_auth_user');
+    setIsLoggedIn(false);
+    setCurrentUser(null);
+
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
@@ -432,7 +495,6 @@ export function AuthProvider({ children }) {
         console.warn('Lỗi đăng xuất Supabase:', e);
       }
     }
-    setIsLoggedIn(false);
   };
 
   // ================= DÀNH CHO SUPER ADMIN: QUẢN LÝ TÀI KHOẢN PHÒNG BAN =================
@@ -489,6 +551,7 @@ export function AuthProvider({ children }) {
     // Đăng ký tài khoản trên Supabase Auth và user_profiles nếu online
     const supabase = getSupabaseClient();
     if (supabase) {
+      isCreatingAccountRef.current = true;
       try {
         const { data: authData } = await supabase.auth.signUp({
           email: cleanEmail,
@@ -516,6 +579,8 @@ export function AuthProvider({ children }) {
         });
       } catch (err) {
         console.warn('[Supabase] Dự phòng user_profiles (tiếp tục qua app_database):', err.message);
+      } finally {
+        isCreatingAccountRef.current = false;
       }
     }
 
@@ -673,6 +738,7 @@ export function AuthProvider({ children }) {
 
   // ================= TÍNH TOÁN BỘ QUYỀN HẠN THỐNG NHẤT =================
   const isSuperAdmin = useMemo(() => {
+    if (!isLoggedIn || !currentUser) return false;
     const emailLower = currentUser?.email?.toLowerCase() || '';
     return Boolean(
       currentUser?.isSuperAdmin || 
@@ -684,9 +750,34 @@ export function AuthProvider({ children }) {
       currentUser?.department === 'ALL' ||
       currentUser?.departmentId === 'ALL'
     );
-  }, [currentUser]);
+  }, [isLoggedIn, currentUser]);
 
   const permissions = useMemo(() => {
+    if (!isLoggedIn || !currentUser) {
+      return {
+        isAdmin: false,
+        isSuperAdmin: false,
+        isDepartmentManager: false,
+        departmentId: '',
+        departmentName: '',
+        canManageAssets: false,
+        canCreateAsset: false,
+        canEditAsset: false,
+        canDeleteAsset: false,
+        canPrintQR: false,
+        canExportExcel: false,
+        canApproveTransfer: false,
+        canApproveLiquidation: false,
+        canApproveRecall: false,
+        canProposeTransfer: false,
+        canProposeLiquidation: false,
+        canProposeRecall: false,
+        canAudit: false,
+        canManageUsers: false,
+        canManageLocations: false
+      };
+    }
+
     const userPerms = currentUser?.permissions || {};
 
     return {

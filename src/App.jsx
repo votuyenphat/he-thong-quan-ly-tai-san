@@ -34,7 +34,7 @@ const VALID_TABS = new Set([
 ]);
 
 function MainApplication() {
-  const { isLoggedIn } = useAuth();
+  const { isLoggedIn, currentUser } = useAuth();
   const { alerts } = useAssets();
   const [activeTab, setActiveTabState] = useState(() => {
     const params = new URLSearchParams(window.location.search);
@@ -66,7 +66,7 @@ function MainApplication() {
     (alerts?.obsoleteTraining?.length || 0) +
     (alerts?.damagedNeedsRepair?.length || 0);
 
-  if (!isLoggedIn) {
+  if (!isLoggedIn || !currentUser) {
     return <LoginScreen />;
   }
 
