@@ -610,6 +610,85 @@ export function generateInventorySlips({
 }
 
 /**
+ * Tạo danh sách phiếu kiểm kê chuẩn (kèm Mã QR bên phải) cho 1 tài sản cụ thể
+ * - Mặc định sinh đủ số phiếu theo đúng Số lượng (SL) của tài sản đó
+ * - Dùng chung 100% mẫu phiếu 5 dòng, định dạng Bộ phận, Vị trí, Thời gian và Mã QR như trang Tạo Phiếu Kiểm Kê
+ */
+export function buildSingleAssetSlips({
+  asset,
+  departments = [],
+  inventoryYear = new Date().getFullYear(),
+  copyCount = null
+}) {
+  const yearNum = Number(inventoryYear) || new Date().getFullYear();
+  const timeText = formatInventoryTimestamp(yearNum);
+
+  if (!asset) {
+    return {
+      slips: [],
+      timeText,
+      year: yearNum,
+      deptLabel: '---',
+      locLabel: '---',
+      totalQuantity: 0
+    };
+  }
+
+  const aDeptId = cleanText(asset.departmentId).toLowerCase();
+  const aDeptName = cleanText(asset.departmentName).toLowerCase();
+  const deptObj = (departments || []).find(
+    d =>
+      (aDeptId && cleanText(d?.id).toLowerCase() === aDeptId) ||
+      (aDeptName && cleanText(d?.name).toLowerCase() === aDeptName)
+  );
+
+  const deptLabel = formatShortDepartment(
+    asset.departmentName || deptObj?.name || '',
+    deptObj?.code || ''
+  );
+  const locLabel = formatShortLocation(asset.locationPath);
+  const assetName = cleanText(asset.name) || '---';
+  const totalQuantity = Math.max(1, Math.round(Number(asset.quantity) || 1));
+  const copies =
+    copyCount !== null && copyCount !== undefined
+      ? Math.max(1, Math.round(Number(copyCount) || 1))
+      : totalQuantity;
+
+  const qrText = buildAssetProfileQrUrl(asset);
+  const qrDataUrl = generateSlipQrDataUrl(qrText);
+
+  const slips = [];
+  for (let idx = 1; idx <= copies; idx++) {
+    slips.push({
+      slipIndex: idx,
+      copyIndex: idx,
+      totalQuantity,
+      asset,
+      assetId: asset.id,
+      assetCode: cleanText(asset.code),
+      assetName,
+      departmentName: cleanText(asset.departmentName),
+      deptLabel,
+      locationPath: cleanText(asset.locationPath),
+      locLabel,
+      timeText,
+      year: yearNum,
+      qrText,
+      qrDataUrl
+    });
+  }
+
+  return {
+    slips,
+    timeText,
+    year: yearNum,
+    deptLabel,
+    locLabel,
+    totalQuantity
+  };
+}
+
+/**
  * Chia danh sách phiếu thành từng hàng 3 cột để render bảng chuẩn mẫu
  */
 export function chunkSlipsIntoRows(slips = [], columns = 3) {

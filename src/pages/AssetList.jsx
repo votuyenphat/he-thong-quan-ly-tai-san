@@ -692,11 +692,11 @@ export default function AssetList({ setActiveTab }) {
                           <Eye size={15} />
                         </button>
 
-                        {/* In tem QR */}
+                        {/* In tem QR / Tạo phiếu kiểm kê */}
                         {permissions?.canPrintQR && (
                           <button
                             className="btn-icon"
-                            title="In tem mã QR"
+                            title="Tạo phiếu kiểm kê & In tem mã QR của tài sản này"
                             onClick={() => handleOpenQR(asset)}
                           >
                             <QrCode size={15} color="#2563eb" />
