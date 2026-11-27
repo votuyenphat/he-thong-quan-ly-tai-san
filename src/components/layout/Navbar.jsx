@@ -1,13 +1,9 @@
 // src/components/layout/Navbar.jsx
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { useAssets } from '../../context/AssetContext';
-import { PRESET_USERS } from '../../data/mockData';
 import { formatDateTime } from '../../utils/formatters';
 import { 
-  Bell, 
   ChevronDown, 
-  Shield, 
   LogOut,
   Building2,
   Clock,
@@ -21,18 +17,10 @@ import SyncModal from '../common/SyncModal';
 import ChangePasswordModal from '../common/ChangePasswordModal';
 
 export default function Navbar({ setActiveTab, onOpenMobileMenu }) {
-  const { currentUser, switchRole, logout } = useAuth();
-  const { alerts } = useAssets();
-  const [showRoleMenu, setShowRoleMenu] = useState(false);
+  const { currentUser, logout } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
-
-  const totalAlerts = 
-    alerts.wrongLocation.length + 
-    alerts.missing.length + 
-    alerts.pendingLiquidation.length + 
-    alerts.expiringSoon.length;
 
   return (
     <header className="navbar no-print" style={{
@@ -120,32 +108,6 @@ export default function Navbar({ setActiveTab, onOpenMobileMenu }) {
             </span>
           )}
         </div>
-
-        {/* Alerts Bell */}
-        <button 
-          className="btn-icon" 
-          style={{ position: 'relative' }}
-          onClick={() => setActiveTab('alerts')}
-          title="Xem cảnh báo tài sản"
-        >
-          <Bell size={18} />
-          {totalAlerts > 0 && (
-            <span style={{
-              position: 'absolute',
-              top: '-4px',
-              right: '-4px',
-              background: '#ef4444',
-              color: '#ffffff',
-              fontSize: '11px',
-              fontWeight: 'bold',
-              borderRadius: '10px',
-              padding: '1px 6px',
-              lineHeight: '16px'
-            }}>
-              {totalAlerts}
-            </span>
-          )}
-        </button>
 
         {/* User Card */}
         <div style={{ position: 'relative' }}>

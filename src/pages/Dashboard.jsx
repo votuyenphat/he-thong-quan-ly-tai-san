@@ -24,12 +24,8 @@ import {
   Package,
   Clock,
   Archive,
-  AlertTriangle,
   Building,
-  TrendingUp,
-  ShieldAlert,
-  GraduationCap,
-  ArrowRight
+  GraduationCap
 } from 'lucide-react';
 
 import {
@@ -335,16 +331,6 @@ export default function Dashboard({ setActiveTab }) {
     ]
   };
 
-  // 6 Cảnh báo nghiệp vụ tài sản
-  const alertCards = [
-    { title: 'Lạc hậu đào tạo', count: alerts?.obsoleteTraining?.length || 0, color: '#dc2626', bg: '#fee2e2', tab: 'alerts' },
-    { title: 'Hỏng cần sửa / bảo trì', count: alerts?.damagedNeedsRepair?.length || 0, color: '#ea580c', bg: '#ffedd5', tab: 'alerts' },
-    { title: 'Sắp hết hạn sử dụng', count: alerts?.expiringSoon?.length || 0, color: '#7c3aed', bg: '#f5f3ff', tab: 'alerts' },
-    { title: 'Chờ duyệt thanh lý', count: alerts?.pendingLiquidation?.length || 0, color: '#d97706', bg: '#fef3c7', tab: 'liquidation' },
-    { title: 'Sai vị trí thực tế', count: alerts?.wrongLocation?.length || 0, color: '#0284c7', bg: '#e0f2fe', tab: 'alerts' },
-    { title: 'Thất lạc (Mất)', count: alerts?.missing?.length || 0, color: '#991b1b', bg: '#fee2e2', tab: 'alerts' },
-  ];
-
   return (
     <div className="page-body">
       {/* Page Header */}
@@ -449,8 +435,7 @@ export default function Dashboard({ setActiveTab }) {
         {/* Lạc hậu đào tạo */}
         <div 
           className="card" 
-          style={{ borderLeft: '4px solid #dc2626', cursor: 'pointer', background: '#fef2f2' }}
-          onClick={() => setActiveTab('alerts')}
+          style={{ borderLeft: '4px solid #dc2626', background: '#fef2f2' }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '0.825rem', color: '#991b1b', fontWeight: 700 }}>Lạc hậu đào tạo</span>
@@ -465,54 +450,7 @@ export default function Dashboard({ setActiveTab }) {
         </div>
       </div>
 
-      {/* 2. CẢNH BÁO THỜI GIAN THỰC (6 Thẻ cảnh báo) */}
-      <div className="card" style={{ marginBottom: 24, background: '#fffbeb', borderColor: '#fde68a' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <ShieldAlert size={20} color="#b45309" />
-            <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#92400e', margin: 0 }}>
-              Trung Tâm Cảnh Báo Nghiệp Vụ
-            </h3>
-          </div>
-          <button 
-            className="btn btn-secondary btn-sm" 
-            onClick={() => setActiveTab('alerts')}
-            style={{ fontSize: '0.8rem', background: '#ffffff' }}
-          >
-            Xem tất cả cảnh báo <ArrowRight size={14} />
-          </button>
-        </div>
-
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-          gap: 12
-        }}>
-          {alertCards.map((c, idx) => (
-            <div 
-              key={idx}
-              onClick={() => setActiveTab(c.tab)}
-              style={{
-                background: '#ffffff',
-                border: '1px solid #fed7aa',
-                borderRadius: '8px',
-                padding: '12px 14px',
-                cursor: 'pointer',
-                transition: 'all 150ms'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
-              onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
-            >
-              <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>{c.title}</div>
-              <div style={{ fontSize: '1.35rem', fontWeight: 800, color: c.color, marginTop: 4 }}>
-                {c.count} <span style={{ fontSize: '0.8rem', fontWeight: 500, color: '#64748b' }}>tài sản</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* 3. BIỂU ĐỒ 1 & 2 */}
+      {/* 2. BIỂU ĐỒ 1 & 2 */}
       <div className="dashboard-grid-2">
         {/* Biểu đồ theo phòng */}
         <div className="card">

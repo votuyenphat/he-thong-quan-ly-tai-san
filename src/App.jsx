@@ -1,8 +1,8 @@
 // src/App.jsx
 import React, { useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { AssetProvider, useAssets } from './context/AssetContext';
-import { LayoutDashboard, Boxes, PlusCircle, ShieldAlert, Menu } from 'lucide-react';
+import { AssetProvider } from './context/AssetContext';
+import { LayoutDashboard, Boxes, PlusCircle, Menu } from 'lucide-react';
 
 // Layout
 import Navbar from './components/layout/Navbar';
@@ -18,7 +18,6 @@ import AssetRecall from './pages/AssetRecall';
 import AssetLiquidation from './pages/AssetLiquidation';
 import DepartmentTree from './pages/DepartmentTree';
 import LocationTree from './pages/LocationTree';
-import AlertsPage from './pages/AlertsPage';
 import ReportsPage from './pages/ReportsPage';
 import AuditLogsPage from './pages/AuditLogsPage';
 import CategoryConfig from './pages/CategoryConfig';
@@ -28,14 +27,13 @@ import AssetPublicProfile from './pages/AssetPublicProfile';
 import ForcePasswordChangeModal from './components/common/ForcePasswordChangeModal';
 
 const VALID_TABS = new Set([
-  'dashboard', 'alerts', 'assets', 'inbound', 'inventory-slips',
+  'dashboard', 'assets', 'inbound', 'inventory-slips',
   'categories', 'transfer', 'recall', 'liquidation', 'departments', 'locations',
   'reports', 'audit', 'users'
 ]);
 
 function MainApplication() {
   const { isLoggedIn, currentUser } = useAuth();
-  const { alerts } = useAssets();
   const [activeTab, setActiveTabState] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     const tabParam = params.get('tab');
@@ -58,14 +56,6 @@ function MainApplication() {
     }
   };
 
-  const totalAlerts = 
-    (alerts?.wrongLocation?.length || 0) + 
-    (alerts?.missing?.length || 0) + 
-    (alerts?.pendingLiquidation?.length || 0) + 
-    (alerts?.expiringSoon?.length || 0) +
-    (alerts?.obsoleteTraining?.length || 0) +
-    (alerts?.damagedNeedsRepair?.length || 0);
-
   if (!isLoggedIn || !currentUser) {
     return <LoginScreen />;
   }
@@ -74,8 +64,6 @@ function MainApplication() {
     switch (activeTab) {
       case 'dashboard':
         return <Dashboard setActiveTab={setActiveTab} />;
-      case 'alerts':
-        return <AlertsPage setActiveTab={setActiveTab} />;
       case 'assets':
         return <AssetList setActiveTab={setActiveTab} />;
       case 'inbound':
@@ -159,21 +147,6 @@ function MainApplication() {
         >
           <PlusCircle size={20} />
           <span>Nhập mới</span>
-        </button>
-
-        <button
-          type="button"
-          className={`mobile-nav-item ${activeTab === 'alerts' ? 'active' : ''}`}
-          onClick={() => {
-            setActiveTab('alerts');
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
-        >
-          <ShieldAlert size={20} />
-          <span>Cảnh báo</span>
-          {totalAlerts > 0 && (
-            <span className="mobile-nav-badge">{totalAlerts}</span>
-          )}
         </button>
 
         <button

@@ -1,7 +1,6 @@
 // src/components/layout/Sidebar.jsx
 import React from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { useAssets } from '../../context/AssetContext';
 import {
   LayoutDashboard,
   Boxes,
@@ -13,7 +12,6 @@ import {
   MapPin,
   FileSpreadsheet,
   History,
-  ShieldAlert,
   Users,
   Tags,
   X
@@ -21,28 +19,12 @@ import {
 
 export default function Sidebar({ activeTab, setActiveTab, mobileOpen, onClose }) {
   const { permissions, currentUser } = useAuth();
-  const { alerts } = useAssets();
-
-  const totalAlerts = 
-    (alerts?.wrongLocation?.length || 0) + 
-    (alerts?.missing?.length || 0) + 
-    (alerts?.pendingLiquidation?.length || 0) + 
-    (alerts?.expiringSoon?.length || 0) +
-    (alerts?.obsoleteTraining?.length || 0) +
-    (alerts?.damagedNeedsRepair?.length || 0);
 
   const menuSections = [
     {
       title: 'TỔNG QUAN',
       items: [
-        { id: 'dashboard', label: 'Dashboard Tổng quan', icon: LayoutDashboard, visible: true },
-        { 
-          id: 'alerts', 
-          label: 'Trung tâm Cảnh báo', 
-          icon: ShieldAlert, 
-          visible: true,
-          badge: totalAlerts > 0 ? totalAlerts : null
-        }
+        { id: 'dashboard', label: 'Dashboard Tổng quan', icon: LayoutDashboard, visible: true }
       ]
     },
     {
